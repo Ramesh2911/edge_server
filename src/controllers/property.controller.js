@@ -147,16 +147,30 @@ class PropertyController {
     // Administration Actions
     async approveProperty(req, res) {
         try {
-            await propertyService.updateVerificationStatus(req.params.id, 'Approved', req.body.comments);
-            return response.success(res, "Property validation approved");
-        } catch (err) { return response.error(res, err.message, 500); }
+            const result = await propertyService.updateVerificationStatus(
+                req.params.id,
+                'Approved',
+                req.body.comments || req.body.comment,
+                req.user // Decoded user payload from verifyToken middleware
+            );
+            return response.success(res, "Property validation processed", result);
+        } catch (err) {
+            return response.error(res, err.message, 500);
+        }
     }
 
     async rejectProperty(req, res) {
         try {
-            await propertyService.updateVerificationStatus(req.params.id, 'Rejected', req.body.comments);
-            return response.success(res, "Property listing rejected");
-        } catch (err) { return response.error(res, err.message, 500); }
+            const result = await propertyService.updateVerificationStatus(
+                req.params.id,
+                'Rejected',
+                req.body.comments || req.body.comment,
+                req.user
+            );
+            return response.success(res, "Property rejection processed", result);
+        } catch (err) {
+            return response.error(res, err.message, 500);
+        }
     }
 
     async changeStatus(req, res) {
@@ -173,11 +187,13 @@ class PropertyController {
         } catch (err) { return response.error(res, err.message, 500); }
     }
 
-    async adminPropertyList(req, res) {
+    async propertyList(req, res) {
         try {
-            const data = await propertyService.getAdminPropertyList(req.query);
-            return response.success(res, "Administrative full grid mapped", data);
-        } catch (err) { return response.error(res, err.message, 500); }
+            const data = await propertyService.getPropertyList();
+            return response.success(res, "Approved properties retrieved successfully", data);
+        } catch (err) {
+            return response.error(res, err.message, 500);
+        }
     }
 }
 

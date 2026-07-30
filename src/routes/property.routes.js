@@ -11,7 +11,7 @@ router.get("/featured", propertyController.getFeaturedProperties);
 router.get("/latest", propertyController.getLatestProperties);
 router.get("/search", propertyController.searchProperty);
 router.get("/filter", propertyController.filterProperty);
-router.get("/", propertyController.getProperties);
+router.get("/all", propertyController.getProperties);
 router.get("/details/:id", propertyController.getPropertyById);
 
 // Protected Core Actions & User Dashboards
@@ -35,6 +35,6 @@ router.patch("/admin/approve/:id", verifyToken, propertyController.approveProper
 router.patch("/admin/reject/:id", verifyToken, propertyController.rejectProperty);
 router.patch("/admin/status/:id", verifyToken, propertyController.changeStatus);
 router.patch("/admin/featured/:id", verifyToken, propertyController.makeFeatured);
-router.get("/admin/list", verifyToken, propertyController.adminPropertyList);
+router.get("/list",  propertyController.propertyList);
 
 module.exports = router;
