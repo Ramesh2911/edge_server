@@ -17,6 +17,8 @@ app.use(helmet());
 const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
+    "https://edge-website-six.vercel.app",
+    "https://realestate-admin-eight.vercel.app"
 ];
 
 const corsOptions = {
