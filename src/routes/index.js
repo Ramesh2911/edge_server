@@ -10,5 +10,16 @@ router.use("/properties", require("./property.routes"));
 // User Routes
 router.use("/users", require("./user.routes"));
 
+// Dashboard Routes
+router.use("/dashboard", require("./dashboard.routes"));
+
+// Lead / Buyer Requirements Routes
+router.use("/leads", require("./lead.routes"));
+
+// Notification Routes
+router.use("/notifications", require("./notification.routes"));
+
+// SEO Routes
+router.use("/seo", require("./seo.routes"));
 
 module.exports = router;

@@ -350,6 +350,12 @@ class AuthService {
                 [user.id]
             );
 
+            // Log login activity
+            try {
+                const activityService = require("./activity.service");
+                await activityService.logActivity(user.id, "LOGIN", "user", user.id, `User ${user.email} logged in`, null);
+            } catch (e) { /* silent */ }
+
             // =============================
             // Generate JWT Token
             // =============================

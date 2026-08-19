@@ -18,6 +18,13 @@ class PropertyService {
         if (files && files.property_images) {
             for (let f of files.property_images) await executeQuery("INSERT INTO property_images (property_id, image) VALUES (?,?)", [res.insertId, f.filename]);
         }
+
+        // Log activity
+        try {
+            const activityService = require("./activity.service");
+            await activityService.logActivity(userId, "PROPERTY_CREATED", "property", res.insertId, `New property "${data.property_title}" created`, null);
+        } catch (e) { /* silent */ }
+
         return res.insertId;
     }
 
@@ -71,11 +78,38 @@ class PropertyService {
     async removeWishlist(userId, propertyId) { return await executeQuery("DELETE FROM user_wishlist WHERE user_id=? AND property_id=?", [userId, propertyId]); }
     async getWishlist(userId) { return await executeQuery("SELECT p.* FROM properties p JOIN user_wishlist w ON p.id = w.property_id WHERE w.user_id=?", [userId]); }
 
-    async addInterest(userId, propertyId, message) { return await executeQuery("INSERT INTO property_inquiries (user_id, property_id, message) VALUES (?,?,?)", [userId, propertyId, message]); }
+    async addInterest(userId, propertyId, message) {
+        const result = await executeQuery("INSERT INTO property_inquiries (user_id, property_id, message) VALUES (?,?,?)", [userId, propertyId, message]);
+
+        // Notify property owner
+        try {
+            const property = await this.getPropertyById(propertyId);
+            if (property && property.user_id) {
+                const notificationService = require("./notification.service");
+                const buyer = await executeQuery("SELECT full_name FROM users WHERE id=?", [userId]);
+                const buyerName = buyer[0] ? buyer[0].full_name : "A buyer";
+                await notificationService.create(
+                    property.user_id,
+                    "INTEREST",
+                    "New Interest in Your Property",
+                    `${buyerName} is interested in "${property.property_title}"`,
+                    "property",
+                    propertyId
+                );
+            }
+        } catch (e) { /* silent */ }
+
+        // Log activity
+        try {
+            const activityService = require("./activity.service");
+            await activityService.logActivity(userId, "PROPERTY_INTEREST", "property", propertyId, `Buyer showed interest in property`, null);
+        } catch (e) { /* silent */ }
+
+        return result;
+    }
     async getInterestsForUser(userId) { return await executeQuery("SELECT i.*, p.property_title FROM property_inquiries i JOIN properties p ON i.property_id = p.id WHERE p.user_id=?", [userId]); }
 
     async updateVerificationStatus(propertyId, status, comment, user) {
-        // 1. Fetch or create property verification record
         let verificationRows = await executeQuery(
             "SELECT * FROM property_verification WHERE property_id = ?",
             [propertyId]
@@ -96,43 +130,43 @@ class PropertyService {
         let adminAStatus = currentV.admin_a_status;
         let adminBStatus = currentV.admin_b_status;
         let superAdminStatus = currentV.super_admin_status;
-
         let adminAComment = currentV.admin_a_comment;
         let adminBComment = currentV.admin_b_comment;
         let superAdminComment = currentV.super_admin_comment;
+        let adminAReviewedBy = currentV.admin_a_reviewed_by;
+        let adminAReviewedAt = currentV.admin_a_reviewed_at;
+        let adminBReviewedBy = currentV.admin_b_reviewed_by;
+        let adminBReviewedAt = currentV.admin_b_reviewed_at;
+        let superAdminReviewedBy = currentV.super_admin_reviewed_by;
+        let superAdminReviewedAt = currentV.super_admin_reviewed_at;
 
-        // Safely cast role_id to Number
         const roleId = Number(user.role_id);
+        const now = new Date();
 
-        // 2. Assign action based strictly on role_id
-        // Assuming role_id Mapping:
-        // 1 = Super Admin
-        // 2 = Admin A (or set to your specific role ID)
-        // 3 = Admin B (or set to your specific role ID)
         if (roleId === 2) {
             adminAStatus = status;
             adminAComment = comment;
+            adminAReviewedBy = user.id;
+            adminAReviewedAt = now;
         } else if (roleId === 3) {
             adminBStatus = status;
             adminBComment = comment;
+            adminBReviewedBy = user.id;
+            adminBReviewedAt = now;
         } else if (roleId === 1) {
             superAdminStatus = status;
             superAdminComment = comment;
+            superAdminReviewedBy = user.id;
+            superAdminReviewedAt = now;
         }
 
-        // 3. --- EVALUATE WORKFLOW CASES ---
         let globalPropertyStatus = 'Pending';
 
-        // Case 1: Both Approved -> Published
         if (adminAStatus === 'Approved' && adminBStatus === 'Approved') {
             globalPropertyStatus = 'Approved';
-        }
-        // Case 2: Both Rejected -> Rejected
-        else if (adminAStatus === 'Rejected' && adminBStatus === 'Rejected') {
+        } else if (adminAStatus === 'Rejected' && adminBStatus === 'Rejected') {
             globalPropertyStatus = 'Rejected';
-        }
-        // Case 3: Conflict (One Approved, One Rejected) -> Super Admin Review Required
-        else if (
+        } else if (
             (adminAStatus === 'Approved' && adminBStatus === 'Rejected') ||
             (adminAStatus === 'Rejected' && adminBStatus === 'Approved')
         ) {
@@ -141,32 +175,40 @@ class PropertyService {
             } else if (superAdminStatus === 'Rejected') {
                 globalPropertyStatus = 'Rejected';
             } else {
-                globalPropertyStatus = 'Pending'; // Remains pending until Super Admin resolves tie
+                globalPropertyStatus = 'Pending';
             }
-        }
-        // Direct Super Admin Action -> Immediate Global Decision
-        else if (roleId === 1) {
+        } else if (roleId === 1) {
             globalPropertyStatus = status;
-        }
-        // Single Admin Approval / Pending -> Remains Pending
-        else {
+        } else {
             globalPropertyStatus = 'Pending';
         }
 
-        // 4. Update Database
         await executeQuery(
             `UPDATE property_verification 
-         SET admin_a_status = ?, admin_a_comment = ?,
-             admin_b_status = ?, admin_b_comment = ?,
-             super_admin_status = ?, super_admin_comment = ?
+         SET admin_a_status = ?, admin_a_comment = ?, admin_a_reviewed_by = ?, admin_a_reviewed_at = ?,
+             admin_b_status = ?, admin_b_comment = ?, admin_b_reviewed_by = ?, admin_b_reviewed_at = ?,
+             super_admin_status = ?, super_admin_comment = ?, super_admin_reviewed_by = ?, super_admin_reviewed_at = ?
          WHERE property_id = ?`,
-            [adminAStatus, adminAComment, adminBStatus, adminBComment, superAdminStatus, superAdminComment, propertyId]
+            [adminAStatus, adminAComment, adminAReviewedBy, adminAReviewedAt, adminBStatus, adminBComment, adminBReviewedBy, adminBReviewedAt, superAdminStatus, superAdminComment, superAdminReviewedBy, superAdminReviewedAt, propertyId]
         );
 
         await executeQuery(
             "UPDATE properties SET property_status = ? WHERE id = ?",
             [globalPropertyStatus, propertyId]
         );
+
+        // Log activity
+        try {
+            const activityService = require("./activity.service");
+            await activityService.logActivity(
+                user.id,
+                `PROPERTY_${status.toUpperCase()}`,
+                "property",
+                propertyId,
+                `Property ${status} by ${user.email || 'Admin'}`,
+                null
+            );
+        } catch (e) { /* silent */ }
 
         return {
             property_status: globalPropertyStatus,
