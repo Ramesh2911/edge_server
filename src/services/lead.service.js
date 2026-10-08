@@ -52,8 +52,9 @@ class LeadService {
     }
 
     async updateRequirement(id, data, userId = null) {
+        const n = (v) => (v === undefined ? null : v);
         let sql = `UPDATE buyer_requirements SET title=?, purpose=?, property_type=?, min_budget=?, max_budget=?, city=?, beds=?, baths=?, min_area=?, max_area=?, amenities=?, notes=?, status=?`;
-        let values = [data.title, data.purpose, data.property_type, data.min_budget, data.max_budget, data.city, data.beds, data.baths, data.min_area, data.max_area, data.amenities, data.notes, data.status || 'New'];
+        let values = [n(data.title), n(data.purpose), n(data.property_type), n(data.min_budget), n(data.max_budget), n(data.city), n(data.beds), n(data.baths), n(data.min_area), n(data.max_area), n(data.amenities), n(data.notes), data.status || 'New'];
 
         if (userId) {
             sql += " WHERE id=? AND user_id=?";

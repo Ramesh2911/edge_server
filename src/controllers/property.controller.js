@@ -195,6 +195,16 @@ class PropertyController {
             return response.error(res, err.message, 500);
         }
     }
+
+    // Public browse feed — top-level { listings, total, page, totalPages, limit }
+    async browseProperties(req, res) {
+        try {
+            const data = await propertyService.browseProperties(req.query);
+            return res.status(200).json(data);
+        } catch (err) {
+            return response.error(res, err.message, 500);
+        }
+    }
 }
 
 module.exports = new PropertyController();

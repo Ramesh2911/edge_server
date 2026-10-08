@@ -22,4 +22,7 @@ router.use("/notifications", require("./notification.routes"));
 // SEO Routes
 router.use("/seo", require("./seo.routes"));
 
+// Contact inquiry (public)
+router.use("/contact", require("./contact.routes"));
+
 module.exports = router;

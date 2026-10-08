@@ -7,6 +7,7 @@ const roleMiddleware = require("../middleware/role.middleware");
 const { ROLE } = require("../config/constants");
 
 // Public Lookups & Feeds
+router.get("/", propertyController.browseProperties);
 router.get("/amenities", propertyController.getAmenities);
 router.get("/categories", propertyController.getCategories);
 router.get("/featured", propertyController.getFeaturedProperties);

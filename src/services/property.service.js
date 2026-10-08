@@ -9,6 +9,29 @@ class PropertyService {
     async getAllAmenities() { return await executeQuery("SELECT * FROM amenities WHERE status = 1"); }
     async getAllCategories() { return await executeQuery("SELECT * FROM property_categories WHERE status = 1"); }
 
+    // Attach property_images (root-relative paths) to property rows
+    async attachImages(list) {
+        if (!Array.isArray(list) || list.length === 0) return list;
+        const ids = list.map((p) => p.id).filter((id) => id != null);
+        if (ids.length === 0) return list;
+        const rows = await executeQuery(
+            `SELECT property_id, image FROM property_images WHERE property_id IN (${ids.map(() => "?").join(",")}) ORDER BY id ASC`,
+            ids
+        );
+        const map = new Map();
+        for (const r of rows) {
+            if (!map.has(r.property_id)) map.set(r.property_id, []);
+            map.get(r.property_id).push(`/uploads/property/images/${r.image}`);
+        }
+        return list.map((p) => ({ ...p, images: map.get(p.id) || [] }));
+    }
+
+    async attachImage(property) {
+        if (!property) return property;
+        const withImages = await this.attachImages([property]);
+        return withImages[0];
+    }
+
     async createProperty(data, userId, files) {
         const sql = `INSERT INTO properties (user_id, category_id, property_title, property_for, property_type, price, area, area_unit, bedroom, bathroom, balcony, parking, furnishing, ownership, construction_status, possession_date, description, address, city, state, country, pincode, latitude, longitude, property_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Pending')`;
         const values = [userId, data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null];
@@ -28,9 +51,13 @@ class PropertyService {
         return res.insertId;
     }
 
-    async updateProperty(id, data, userId) {
+    async updateProperty(id, data, userId, files) {
         const sql = `UPDATE properties SET category_id=?, property_title=?, property_for=?, property_type=?, price=?, area=?, area_unit=?, bedroom=?, bathroom=?, balcony=?, parking=?, furnishing=?, ownership=?, construction_status=?, possession_date=?, description=?, address=?, city=?, state=?, country=?, pincode=? WHERE id=? AND user_id=?`;
-        return await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom, data.bathroom, data.balcony, data.parking, data.furnishing, data.ownership, data.construction_status, data.possession_date, data.description, data.address, data.city, data.state, data.country, data.pincode, id, userId]);
+        const result = await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom, data.bathroom, data.balcony, data.parking, data.furnishing, data.ownership, data.construction_status, data.possession_date, data.description, data.address, data.city, data.state, data.country, data.pincode, id, userId]);
+        if (files && files.property_images) {
+            for (let f of files.property_images) await executeQuery("INSERT INTO property_images (property_id, image) VALUES (?,?)", [id, f.filename]);
+        }
+        return result;
     }
 
     async deleteProperty(id, userId) { return await executeQuery("DELETE FROM properties WHERE id=? AND user_id=?", [id, userId]); }
@@ -50,10 +77,10 @@ class PropertyService {
     `;
         return await executeQuery(query);
     }
-    async getPropertyById(id) { const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]); return res[0] || null; }
-    async getMyProperties(userId) { return await executeQuery("SELECT * FROM properties WHERE user_id=?", [userId]); }
+    async getPropertyById(id) { const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]); return await this.attachImage(res[0] || null); }
+    async getMyProperties(userId) { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE user_id=?", [userId])); }
 
-    async searchProperty(keyword) { return await executeQuery("SELECT * FROM properties WHERE property_status='Approved' AND (property_title LIKE ? OR description LIKE ?)", [`%${keyword}%`, `%${keyword}%`]); }
+    async searchProperty(keyword) { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status='Approved' AND (property_title LIKE ? OR description LIKE ?)", [`%${keyword}%`, `%${keyword}%`])); }
 
     async filterProperty(f) {
         let sql = "SELECT * FROM properties WHERE property_status='Approved'";
@@ -62,11 +89,11 @@ class PropertyService {
         if (f.city) { sql += " AND city=?"; params.push(f.city); }
         if (f.minPrice) { sql += " AND price>=?"; params.push(f.minPrice); }
         if (f.maxPrice) { sql += " AND price<=?"; params.push(f.maxPrice); }
-        return await executeQuery(sql, params);
+        return await this.attachImages(await executeQuery(sql, params));
     }
 
-    async getFeaturedProperties() { return await executeQuery("SELECT * FROM properties WHERE featured=1 AND property_status='Approved'"); }
-    async getLatestProperties() { return await executeQuery("SELECT * FROM properties WHERE property_status='Approved' ORDER BY created_at DESC LIMIT 10"); }
+    async getFeaturedProperties() { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE featured=1 AND property_status='Approved'")); }
+    async getLatestProperties() { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status='Approved' ORDER BY created_at DESC LIMIT 10")); }
 
     async getDashboardStats(userId) {
         const total = await executeQuery("SELECT COUNT(*) as count FROM properties WHERE user_id=?", [userId]);
@@ -76,7 +103,7 @@ class PropertyService {
 
     async addWishlist(userId, propertyId) { return await executeQuery("INSERT IGNORE INTO user_wishlist (user_id, property_id) VALUES (?,?)", [userId, propertyId]); }
     async removeWishlist(userId, propertyId) { return await executeQuery("DELETE FROM user_wishlist WHERE user_id=? AND property_id=?", [userId, propertyId]); }
-    async getWishlist(userId) { return await executeQuery("SELECT p.* FROM properties p JOIN user_wishlist w ON p.id = w.property_id WHERE w.user_id=?", [userId]); }
+    async getWishlist(userId) { return await this.attachImages(await executeQuery("SELECT p.* FROM properties p JOIN user_wishlist w ON p.id = w.property_id WHERE w.user_id=?", [userId])); }
 
     async addInterest(userId, propertyId, message) {
         const result = await executeQuery("INSERT INTO property_inquiries (user_id, property_id, message) VALUES (?,?,?)", [userId, propertyId, message]);
@@ -222,10 +249,131 @@ class PropertyService {
 
     async changeStatus(id, status) { return await executeQuery("UPDATE properties SET property_status=? WHERE id=?", [status, id]); }
     async setFeatured(id, featured) { return await executeQuery("UPDATE properties SET featured=? WHERE id=?", [featured, id]); }
-    async getPropertyList() {
-        return await executeQuery(
-            "SELECT * FROM properties WHERE property_status = 'Approved' ORDER BY created_at DESC"
+    async getPropertyList() { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status = 'Approved' ORDER BY created_at DESC")); }
+
+    // Public browse feed — filters + sorting + pagination.
+    // Returns top-level { listings, total, page, totalPages, limit }
+    // (matches the payload shape the website PropertyList page reads).
+    async browseProperties(q = {}) {
+        const toArray = (v) => {
+            if (v == null || v === "") return [];
+            return (Array.isArray(v) ? v : String(v).split(","))
+                .map((s) => String(s).trim())
+                .filter(Boolean);
+        };
+        const toNum = (v) => {
+            if (v == null || v === "") return null;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        };
+
+        let rows = await this.attachImages(
+            await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
         );
+
+        // --- keyword / location ---
+        const keyword = String(q.keyword || q.search || "").trim().toLowerCase();
+        if (keyword) {
+            rows = rows.filter(
+                (p) =>
+                    String(p.property_title || "").toLowerCase().includes(keyword) ||
+                    String(p.description || "").toLowerCase().includes(keyword)
+            );
+        }
+        const location = String(q.location || q.city || "").trim().toLowerCase();
+        if (location) {
+            rows = rows.filter(
+                (p) =>
+                    String(p.address || "").toLowerCase().includes(location) ||
+                    String(p.city || "").toLowerCase().includes(location) ||
+                    String(p.state || "").toLowerCase().includes(location)
+            );
+        }
+
+        // --- purpose (Sale / Rent) ---
+        const purpose = String(q.listingType || q.purpose || "").trim();
+        if (purpose) {
+            rows = rows.filter((p) => {
+                const pf = String(p.property_for || "");
+                return pf === purpose || pf === "Sale/Rent" || pf.includes(purpose);
+            });
+        }
+
+        // --- property types ---
+        const types = toArray(q.propertyTypes);
+        if (types.length) {
+            rows = rows.filter((p) => types.includes(String(p.property_type || "")));
+        } else if (q.type) {
+            rows = rows.filter((p) => String(p.property_type || "") === String(q.type));
+        }
+
+        // --- bedrooms (["1","2","3","4+"] — 4+ means >= 4) ---
+        const beds = toArray(q.bedrooms);
+        if (beds.length) {
+            rows = rows.filter((p) => {
+                const b = Number(p.bedroom) || 0;
+                return beds.some((opt) =>
+                    opt.endsWith("+") ? b >= Number(opt.slice(0, -1)) : b === Number(opt)
+                );
+            });
+        }
+
+        // --- numeric ranges ---
+        const minPrice = toNum(q.minPrice);
+        const maxPrice = toNum(q.maxPrice);
+        const minArea = toNum(q.minArea);
+        const maxArea = toNum(q.maxArea);
+        if (minPrice != null) rows = rows.filter((p) => Number(p.price) >= minPrice);
+        if (maxPrice != null) rows = rows.filter((p) => Number(p.price) <= maxPrice);
+        if (minArea != null) rows = rows.filter((p) => Number(p.area) >= minArea);
+        if (maxArea != null) rows = rows.filter((p) => Number(p.area) <= maxArea);
+
+        // --- listing status (e.g. New Launch) ---
+        if (q.status) {
+            rows = rows.filter(
+                (p) =>
+                    String(p.construction_status || "") === String(q.status) ||
+                    String(p.property_status || "") === String(q.status)
+            );
+        }
+
+        // --- sorting ---
+        const sort = String(q.sort || "relevance");
+        switch (sort) {
+            case "price_low":
+                rows = rows.slice().sort((a, b) => ((Number(a.price) || 0) - (Number(b.price) || 0)) * 1);
+                break;
+            case "price_high":
+                rows = rows.slice().sort((a, b) => ((Number(a.price) || 0) - (Number(b.price) || 0)) * -1);
+                break;
+            case "area_high":
+                rows = rows.slice().sort((a, b) => ((Number(a.area) || 0) - (Number(b.area) || 0)) * -1);
+                break;
+            case "newest":
+                rows = rows.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                break;
+            default:
+                // relevance — featured first, then newest
+                rows = rows.slice().sort((a, b) => {
+                    const f = (Number(b.featured) || 0) - (Number(a.featured) || 0);
+                    if (f !== 0) return f;
+                    return new Date(b.created_at) - new Date(a.created_at);
+                });
+        }
+
+        // --- pagination ---
+        const limit = Math.min(Math.max(toNum(q.limit) || 9, 1), 50);
+        const totalPages = Math.max(Math.ceil(rows.length / limit), 1);
+        const page = Math.min(Math.max(toNum(q.page) || 1, 1), totalPages);
+        const start = (page - 1) * limit;
+
+        return {
+            listings: rows.slice(start, start + limit),
+            total: rows.length,
+            page,
+            totalPages,
+            limit,
+        };
     }
 }
 
