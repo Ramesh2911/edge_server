@@ -20,7 +20,22 @@ class DashboardController {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 50;
-            const data = await dashboardService.getLogs(page, limit);
+            const search = (req.query.search || "").toString().trim().slice(0, 120);
+            const role = (req.query.role || "").toString().trim().slice(0, 60);
+            const type = (req.query.type || "").toString().trim().slice(0, 60);
+            const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || "")
+                ? req.query.from
+                : "";
+            const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || "")
+                ? req.query.to
+                : "";
+            const data = await dashboardService.getLogs(page, limit, {
+                search,
+                role,
+                type,
+                from,
+                to,
+            });
             return response.success(res, "Activity logs loaded", data);
         } catch (err) { return response.error(res, err.message, 500); }
     }

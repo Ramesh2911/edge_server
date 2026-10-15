@@ -83,3 +83,16 @@ INSERT IGNORE INTO seo_pages (title, slug, meta_title, meta_description, content
 ('Home', 'home', 'EDGE MILE REALTY - Premium Real Estate', 'Find your dream property with EDGE MILE REALTY. Buy, rent, and sell properties across India.', '<h1>Welcome to EDGE MILE REALTY</h1><p>Your trusted partner in real estate.</p>', 'real estate, property, buy, rent, India'),
 ('About Us', 'about', 'About EDGE MILE REALTY', 'Learn about EDGE MILE REALTY - your trusted real estate partner.', '<h1>About EDGE MILE REALTY</h1><p>We are a leading real estate platform.</p>', 'about, real estate, company'),
 ('Contact', 'contact', 'Contact EDGE MILE REALTY', 'Get in touch with EDGE MILE REALTY for all your real estate needs.', '<h1>Contact Us</h1><p>We are here to help you.</p>', 'contact, real estate, support');
+
+-- Site Settings Table (key-value platform configuration)
+CREATE TABLE IF NOT EXISTS site_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(64) NOT NULL UNIQUE,
+    setting_value TEXT DEFAULT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT IGNORE INTO site_settings (setting_key, setting_value) VALUES
+('platform_name', 'EdgeMile Realty Platform Engine'),
+('revenue_percent', '20'),
+('token_hours', '24');

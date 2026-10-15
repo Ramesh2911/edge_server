@@ -60,7 +60,19 @@ app.use(loggerMiddleware);
 // ===============================
 // Static Files
 // ===============================
-app.use("/uploads", express.static("uploads"));
+// Uploaded images are consumed by the website/admin which run on other
+// origins (localhost:5173, Vercel). Helmet's default
+// `Cross-Origin-Resource-Policy: same-origin` makes the browser refuse to
+// render them (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin), so relax CORP for
+// this public directory only — API responses keep helmet's strict defaults.
+app.use(
+    "/uploads",
+    (req, res, next) => {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        next();
+    },
+    express.static("uploads")
+);
 
 // ===============================
 // API Routes

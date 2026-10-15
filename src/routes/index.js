@@ -22,6 +22,9 @@ router.use("/notifications", require("./notification.routes"));
 // SEO Routes
 router.use("/seo", require("./seo.routes"));
 
+// Site Settings Routes
+router.use("/settings", require("./setting.routes"));
+
 // Contact inquiry (public)
 router.use("/contact", require("./contact.routes"));
 

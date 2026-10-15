@@ -69,19 +69,73 @@ class DashboardService {
         };
     }
 
-    async getLogs(page = 1, limit = 50) {
-        const offset = (page - 1) * limit;
+    async getLogs(page = 1, limit = 50, filters = {}) {
+        const { search, role, type, from, to } = filters;
+        const where = [];
+        const params = [];
+
+        if (search) {
+            where.push(
+                "(u.full_name LIKE ? OR u.email LIKE ? OR al.action LIKE ? OR al.details LIKE ?)"
+            );
+            const like = `%${search}%`;
+            params.push(like, like, like, like);
+        }
+        if (role) {
+            where.push("r.role_name = ?");
+            params.push(role);
+        }
+        if (type) {
+            where.push("al.target_type = ?");
+            params.push(type);
+        }
+        if (from) {
+            where.push("al.created_at >= ?");
+            params.push(`${from} 00:00:00`);
+        }
+        if (to) {
+            where.push("al.created_at <= ?");
+            params.push(`${to} 23:59:59`);
+        }
+
+        const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+        const safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), 200);
+        const safePage = Math.max(parseInt(page) || 1, 1);
+        const offset = (safePage - 1) * safeLimit;
+
         const logs = await executeQuery(
             `SELECT al.*, u.full_name, u.email, r.role_name
              FROM activity_logs al
              LEFT JOIN users u ON al.user_id = u.id
              LEFT JOIN roles r ON u.role_id = r.id
+             ${whereSql}
              ORDER BY al.created_at DESC
              LIMIT ? OFFSET ?`,
-            [limit, offset]
+            [...params, safeLimit, offset]
         );
-        const total = await executeQuery("SELECT COUNT(*) as count FROM activity_logs");
-        return { logs, total: total[0].count, page, limit };
+        const total = await executeQuery(
+            `SELECT COUNT(*) as count
+             FROM activity_logs al
+             LEFT JOIN users u ON al.user_id = u.id
+             LEFT JOIN roles r ON u.role_id = r.id
+             ${whereSql}`,
+            params
+        );
+        const roles = await executeQuery(
+            "SELECT DISTINCT r.role_name FROM activity_logs al LEFT JOIN users u ON al.user_id = u.id LEFT JOIN roles r ON u.role_id = r.id WHERE r.role_name IS NOT NULL ORDER BY r.role_name"
+        );
+        const types = await executeQuery(
+            "SELECT DISTINCT target_type FROM activity_logs WHERE target_type IS NOT NULL ORDER BY target_type"
+        );
+
+        return {
+            logs,
+            total: total[0].count,
+            page: safePage,
+            limit: safeLimit,
+            roles: roles.map((r) => r.role_name),
+            types: types.map((t) => t.target_type),
+        };
     }
 
     async getPropertyStats() {
