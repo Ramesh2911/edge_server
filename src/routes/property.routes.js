@@ -33,6 +33,8 @@ router.get("/wishlist", verifyToken, propertyController.getWishlist);
 // Lead / Inquiries Tracking
 router.post("/interested/:propertyId", verifyToken, propertyController.interestedProperty);
 router.get("/leads/interested", verifyToken, propertyController.getInterestedProperty);
+router.delete("/inquiries/:id", verifyToken, propertyController.removeInquiry);
+router.patch("/inquiries/:id/status", verifyToken, propertyController.updateInquiryStatus);
 
 // Administrative Controls (Admin A, Admin B, Super Admin only)
 router.patch("/admin/approve/:id", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), propertyController.approveProperty);

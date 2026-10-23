@@ -28,4 +28,13 @@ router.use("/settings", require("./setting.routes"));
 // Contact inquiry (public)
 router.use("/contact", require("./contact.routes"));
 
+// User activity feed
+router.use("/activities", require("./activity.routes"));
+
+// Deal Management
+router.use("/deals", require("./deal.routes"));
+
+// Site Visits
+router.use("/site-visits", require("./siteVisit.routes"));
+
 module.exports = router;

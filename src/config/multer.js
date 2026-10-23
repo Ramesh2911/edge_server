@@ -36,6 +36,12 @@ const storage = multer.diskStorage({
 
         }
 
+        if (file.fieldname === "floor_plan") {
+
+            uploadPath = "uploads/property/floor-plans";
+
+        }
+
         if (file.fieldname === "banner_image") {
 
             uploadPath = "uploads/banner";

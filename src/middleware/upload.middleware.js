@@ -15,6 +15,10 @@ const propertyUpload = (req, res, next) => {
         {
             name: "property_documents",
             maxCount: 10
+        },
+        {
+            name: "floor_plan",
+            maxCount: 1
         }
     ])(req, res, (err) => {
 

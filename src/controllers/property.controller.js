@@ -131,7 +131,7 @@ class PropertyController {
     async interestedProperty(req, res) {
         if (!req.user) return response.error(res, "Unauthorized", 401);
         try {
-            await propertyService.addInterest(req.user.id, req.params.propertyId, req.body.message);
+            await propertyService.addInterest(req.user.id, req.params.propertyId, req.body.message || null);
             return response.success(res, "Interest logged successfully");
         } catch (err) { return response.error(res, err.message, 500); }
     }
@@ -142,6 +142,28 @@ class PropertyController {
             const data = await propertyService.getInterestsForUser(req.user.id);
             return response.success(res, "Leads tracking array loaded", data);
         } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async removeInquiry(req, res) {
+        if (!req.user) return response.error(res, "Unauthorized", 401);
+        try {
+            const data = await propertyService.removeInquiry(req.params.id, req.user.id);
+            return response.success(res, "Inquiry removed", data);
+        } catch (err) {
+            const code = /not found/i.test(err.message) ? 404 : /cannot/i.test(err.message) ? 403 : 500;
+            return response.error(res, err.message, code);
+        }
+    }
+
+    async updateInquiryStatus(req, res) {
+        if (!req.user) return response.error(res, "Unauthorized", 401);
+        try {
+            const data = await propertyService.updateInquiryStatus(req.params.id, req.user.id, req.body.status);
+            return response.success(res, "Inquiry status updated", data);
+        } catch (err) {
+            const code = /not found/i.test(err.message) ? 404 : /invalid/i.test(err.message) ? 400 : /only the property owner/i.test(err.message) ? 403 : 500;
+            return response.error(res, err.message, code);
+        }
     }
 
     // Administration Actions

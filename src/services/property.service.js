@@ -33,8 +33,9 @@ class PropertyService {
     }
 
     async createProperty(data, userId, files) {
-        const sql = `INSERT INTO properties (user_id, category_id, property_title, property_for, property_type, price, area, area_unit, bedroom, bathroom, balcony, parking, furnishing, ownership, construction_status, possession_date, description, address, city, state, country, pincode, latitude, longitude, property_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Pending')`;
-        const values = [userId, data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null];
+        const floorPlan = files && files.floor_plan && files.floor_plan[0] ? files.floor_plan[0].filename : null;
+        const sql = `INSERT INTO properties (user_id, category_id, property_title, property_for, property_type, price, area, area_unit, bedroom, bathroom, balcony, parking, furnishing, ownership, construction_status, possession_date, description, address, city, state, country, pincode, latitude, longitude, floor_plan, property_status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Pending')`;
+        const values = [userId, data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null, floorPlan];
         const res = await executeQuery(sql, values);
 
         await executeQuery("INSERT INTO property_verification (property_id) VALUES (?)", [res.insertId]);
@@ -52,10 +53,36 @@ class PropertyService {
     }
 
     async updateProperty(id, data, userId, files) {
-        const sql = `UPDATE properties SET category_id=?, property_title=?, property_for=?, property_type=?, price=?, area=?, area_unit=?, bedroom=?, bathroom=?, balcony=?, parking=?, furnishing=?, ownership=?, construction_status=?, possession_date=?, description=?, address=?, city=?, state=?, country=?, pincode=? WHERE id=? AND user_id=?`;
-        const result = await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom, data.bathroom, data.balcony, data.parking, data.furnishing, data.ownership, data.construction_status, data.possession_date, data.description, data.address, data.city, data.state, data.country, data.pincode, id, userId]);
+        let floorPlan;
+        if (files && files.floor_plan && files.floor_plan[0]) {
+            floorPlan = files.floor_plan[0].filename;
+        } else if (data.remove_floor_plan === "1" || data.remove_floor_plan === "true") {
+            floorPlan = null;
+        } else if (data.floor_plan !== undefined) {
+            floorPlan = data.floor_plan || null;
+        } else {
+            const [[row]] = await db.query("SELECT floor_plan FROM properties WHERE id=? AND user_id=?", [id, userId]);
+            floorPlan = row ? row.floor_plan : null;
+        }
+        const sql = `UPDATE properties SET category_id=?, property_title=?, property_for=?, property_type=?, price=?, area=?, area_unit=?, bedroom=?, bathroom=?, balcony=?, parking=?, furnishing=?, ownership=?, construction_status=?, possession_date=?, description=?, address=?, city=?, state=?, country=?, pincode=?, latitude=?, longitude=?, floor_plan=? WHERE id=? AND user_id=?`;
+        const result = await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null, floorPlan, id, userId]);
         if (files && files.property_images) {
             for (let f of files.property_images) await executeQuery("INSERT INTO property_images (property_id, image) VALUES (?,?)", [id, f.filename]);
+        }
+        // Optional: purge images listed in data.deleted_images (comma-separated filenames or JSON array)
+        if (data.deleted_images) {
+            let deleted = [];
+            try {
+                deleted = typeof data.deleted_images === "string" ? JSON.parse(data.deleted_images) : data.deleted_images;
+            } catch (e) { deleted = String(data.deleted_images).split(",").filter(Boolean); }
+            if (Array.isArray(deleted)) {
+                for (const name of deleted) {
+                    const base = String(name).split("/").pop();
+                    if (!base) continue;
+                    await executeQuery("DELETE FROM property_images WHERE property_id=? AND image=?", [id, base]);
+                    try { require("fs").unlinkSync(`uploads/property/images/${base}`); } catch (e) { /* ignore */ }
+                }
+            }
         }
         return result;
     }
@@ -77,8 +104,16 @@ class PropertyService {
     `;
         return await executeQuery(query);
     }
-    async getPropertyById(id) { const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]); return await this.attachImage(res[0] || null); }
-    async getMyProperties(userId) { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE user_id=?", [userId])); }
+    async getPropertyById(id) {
+        const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]);
+        const property = await this.attachImage(res[0] || null);
+        if (property && property.floor_plan) property.floor_plan_url = `/uploads/property/floor-plans/${property.floor_plan}`;
+        return property;
+    }
+    async getMyProperties(userId) {
+        const list = await this.attachImages(await executeQuery("SELECT * FROM properties WHERE user_id=?", [userId]));
+        return list.map((p) => p.floor_plan ? { ...p, floor_plan_url: `/uploads/property/floor-plans/${p.floor_plan}` } : p);
+    }
 
     async searchProperty(keyword) { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status='Approved' AND (property_title LIKE ? OR description LIKE ?)", [`%${keyword}%`, `%${keyword}%`])); }
 
@@ -134,7 +169,62 @@ class PropertyService {
 
         return result;
     }
-    async getInterestsForUser(userId) { return await executeQuery("SELECT i.*, p.property_title FROM property_inquiries i JOIN properties p ON i.property_id = p.id WHERE p.user_id=?", [userId]); }
+    async getInterestsForUser(userId) {
+        const rows = await executeQuery(
+            `SELECT i.id, i.user_id AS sender_id, i.property_id, i.message, i.status, i.created_at,
+                    p.property_title, p.price, p.property_for, p.property_type, p.city, p.address, p.state,
+                    p.user_id AS owner_id,
+                    CASE WHEN i.user_id = ? THEN 'sent' ELSE 'received' END AS direction,
+                    s.full_name AS sender_name, s.mobile AS sender_mobile, s.email AS sender_email,
+                    o.full_name AS owner_name, o.mobile AS owner_mobile, o.email AS owner_email
+             FROM property_inquiries i
+             JOIN properties p ON p.id = i.property_id
+             LEFT JOIN users s ON s.id = i.user_id
+             LEFT JOIN users o ON o.id = p.user_id
+             WHERE i.user_id = ? OR p.user_id = ?
+             ORDER BY i.created_at DESC`,
+            [userId, userId, userId]
+        );
+        if (rows.length === 0) return [];
+        const ids = [...new Set(rows.map((r) => r.property_id).filter((id) => id != null))];
+        const imgRows = ids.length
+            ? await executeQuery(
+                `SELECT property_id, image FROM property_images WHERE property_id IN (${ids.map(() => "?").join(",")}) ORDER BY id ASC`,
+                ids
+            )
+            : [];
+        const map = new Map();
+        for (const r of imgRows) {
+            if (!map.has(r.property_id)) map.set(r.property_id, []);
+            map.get(r.property_id).push(`/uploads/property/images/${r.image}`);
+        }
+        return rows.map((r) => ({ ...r, images: map.get(r.property_id) || [] }));
+    }
+
+    async removeInquiry(inquiryId, userId) {
+        const rows = await executeQuery(
+            `SELECT i.id, i.user_id AS sender_id, p.user_id AS owner_id
+             FROM property_inquiries i JOIN properties p ON p.id = i.property_id WHERE i.id = ?`,
+            [inquiryId]
+        );
+        if (!rows.length) throw new Error("Inquiry not found");
+        if (Number(rows[0].sender_id) !== Number(userId) && Number(rows[0].owner_id) !== Number(userId)) throw new Error("You cannot remove this inquiry");
+        await executeQuery("DELETE FROM property_inquiries WHERE id = ?", [inquiryId]);
+        return { id: Number(inquiryId) };
+    }
+
+    async updateInquiryStatus(inquiryId, userId, status) {
+        const allowed = ["New", "Contacted", "Converted", "Lost"];
+        if (!allowed.includes(status)) throw new Error("Invalid status value");
+        const rows = await executeQuery(
+            `SELECT i.id, p.user_id AS owner_id FROM property_inquiries i JOIN properties p ON p.id = i.property_id WHERE i.id = ?`,
+            [inquiryId]
+        );
+        if (!rows.length) throw new Error("Inquiry not found");
+        if (Number(rows[0].owner_id) !== Number(userId)) throw new Error("Only the property owner can update inquiry status");
+        await executeQuery("UPDATE property_inquiries SET status = ? WHERE id = ?", [status, inquiryId]);
+        return { id: Number(inquiryId), status };
+    }
 
     async updateVerificationStatus(propertyId, status, comment, user) {
         let verificationRows = await executeQuery(
