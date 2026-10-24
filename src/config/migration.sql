@@ -69,6 +69,16 @@ CREATE TABLE IF NOT EXISTS notifications (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- User Wishlist (saved properties) Table
+CREATE TABLE IF NOT EXISTS user_wishlist (
+    user_id INT NOT NULL,
+    property_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, property_id),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+);
+
 -- Add reviewed_by and reviewed_at columns to property_verification
 ALTER TABLE property_verification
     ADD COLUMN IF NOT EXISTS admin_a_reviewed_by INT DEFAULT NULL,
