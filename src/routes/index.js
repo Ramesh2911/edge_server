@@ -25,8 +25,17 @@ router.use("/seo", require("./seo.routes"));
 // Site Settings Routes
 router.use("/settings", require("./setting.routes"));
 
+// Website Footer (contact + useful links) Routes
+router.use("/footer", require("./footer.routes"));
+
 // Contact inquiry (public)
 router.use("/contact", require("./contact.routes"));
+
+// Public page content (about_*, contact_* keys)
+router.use("/content", require("./content.routes"));
+
+// Blog posts (public + admin)
+router.use("/blog", require("./blog.routes"));
 
 // User activity feed
 router.use("/activities", require("./activity.routes"));

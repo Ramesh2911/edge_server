@@ -18,7 +18,13 @@ const allowedOrigins = [
     "http://localhost:5173",
     "http://localhost:5174",
     "https://edge-website-six.vercel.app",
-    "https://realestate-admin-eight.vercel.app"
+    "https://realestate-admin-eight.vercel.app",
+    // Production origins come from env (comma-separated), e.g.
+    // CORS_ORIGIN=https://edgemilerealty.tech,https://admin.edgemilerealty.tech
+    ...(process.env.CORS_ORIGIN || "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
 ];
 
 const corsOptions = {

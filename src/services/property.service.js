@@ -43,6 +43,19 @@ class PropertyService {
             for (let f of files.property_images) await executeQuery("INSERT INTO property_images (property_id, image) VALUES (?,?)", [res.insertId, f.filename]);
         }
 
+        // Persist selected amenities (JSON array string from the form)
+        if (data.amenities) {
+            try {
+                const amenityIds = JSON.parse(data.amenities);
+                if (Array.isArray(amenityIds)) {
+                    for (const rawId of amenityIds) {
+                        const amenityId = parseInt(rawId, 10);
+                        if (amenityId) await executeQuery("INSERT INTO property_amenities (property_id, amenity_id) VALUES (?,?)", [res.insertId, amenityId]);
+                    }
+                }
+            } catch (e) { /* ignore malformed amenities payload */ }
+        }
+
         // Log activity
         try {
             const activityService = require("./activity.service");
@@ -87,7 +100,43 @@ class PropertyService {
         return result;
     }
 
-    async deleteProperty(id, userId) { return await executeQuery("DELETE FROM properties WHERE id=? AND user_id=?", [id, userId]); }
+    async deleteProperty(id, userId) {
+        const conn = await db.getConnection();
+        let filesToRemove = [];
+        try {
+            await conn.beginTransaction();
+            const [owned] = await conn.query("SELECT id FROM properties WHERE id=? AND user_id=?", [id, userId]);
+            if (owned.length === 0) {
+                await conn.rollback();
+                return 0;
+            }
+            // Collect physical files before removing rows
+            const [imgRows] = await conn.query("SELECT image FROM property_images WHERE property_id=?", [id]);
+            const [propRows] = await conn.query("SELECT floor_plan FROM properties WHERE id=?", [id]);
+            filesToRemove = imgRows.map((r) => `uploads/property/images/${r.image}`);
+            if (propRows[0] && propRows[0].floor_plan) filesToRemove.push(`uploads/property/floor-plans/${propRows[0].floor_plan}`);
+
+            // Remove child rows first — several FKs block a direct parent delete
+            const childTables = ["buyer_interest", "deals", "property_amenities", "property_documents", "property_images", "property_verification", "site_visits", "user_wishlist"];
+            for (const table of childTables) {
+                await conn.query(`DELETE FROM ${table} WHERE property_id=?`, [id]);
+            }
+            const [res] = await conn.query("DELETE FROM properties WHERE id=?", [id]);
+            await conn.commit();
+
+            // Best-effort cleanup of uploaded files (outside the transaction)
+            const fs = require("fs");
+            for (const file of filesToRemove) {
+                try { fs.unlinkSync(file); } catch (e) { /* ignore missing files */ }
+            }
+            return res.affectedRows;
+        } catch (err) {
+            await conn.rollback();
+            throw err;
+        } finally {
+            conn.release();
+        }
+    }
     async getProperties() {
         const query = `
         SELECT 
