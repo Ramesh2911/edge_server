@@ -38,6 +38,7 @@ jobs:
         run: |
           ssh -i ~/.ssh/id_ed25519 "root@${{ secrets.VPS_HOST }}" \
             "cd /opt/realestate/server && npm ci --omit=dev --no-audit --no-fund && \
+             node scripts/migrate.js && \
              (pm2 describe edge-api >/dev/null 2>&1 && pm2 reload edge-api --update-env || pm2 start ecosystem.config.js) && \
              pm2 save"
 

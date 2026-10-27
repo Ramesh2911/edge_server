@@ -79,14 +79,9 @@ CREATE TABLE IF NOT EXISTS user_wishlist (
     FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
 );
 
--- Add reviewed_by and reviewed_at columns to property_verification
-ALTER TABLE property_verification
-    ADD COLUMN IF NOT EXISTS admin_a_reviewed_by INT DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS admin_a_reviewed_at TIMESTAMP NULL DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS admin_b_reviewed_by INT DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS admin_b_reviewed_at TIMESTAMP NULL DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS super_admin_reviewed_by INT DEFAULT NULL,
-    ADD COLUMN IF NOT EXISTS super_admin_reviewed_at TIMESTAMP NULL DEFAULT NULL;
+-- Reviewed-by/at columns on property_verification are managed idempotently by
+-- scripts/migrate.js (run: npm run migrate). The old "ADD COLUMN IF NOT EXISTS"
+-- block below was MariaDB-only syntax and was never executed on MySQL 8.x.
 
 -- Insert default SEO pages
 INSERT IGNORE INTO seo_pages (title, slug, meta_title, meta_description, content, keywords) VALUES
