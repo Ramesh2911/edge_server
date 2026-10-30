@@ -389,6 +389,8 @@ class PropertyService {
     async changeStatus(id, status) { return await executeQuery("UPDATE properties SET property_status=? WHERE id=?", [status, id]); }
     async setFeatured(id, featured) { return await executeQuery("UPDATE properties SET featured=? WHERE id=?", [featured, id]); }
     async getPropertyList() { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status = 'Approved' ORDER BY created_at DESC")); }
+    async getPopularProperties() { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status = 'Approved' ORDER BY view_count DESC, created_at DESC LIMIT 12")); }
+    async incrementViews(id) { return await executeQuery("UPDATE properties SET view_count = view_count + 1 WHERE id = ?", [id]); }
 
     // Public browse feed — filters + sorting + pagination.
     // Returns top-level { listings, total, page, totalPages, limit }

@@ -15,6 +15,12 @@ const MIGRATIONS = [
             ["super_admin_reviewed_at", "TIMESTAMP NULL DEFAULT NULL"],
         ],
     },
+    {
+        table: "properties",
+        columns: [
+            ["view_count", "INT NOT NULL DEFAULT 0"],
+        ],
+    },
 ];
 
 async function main() {

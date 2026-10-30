@@ -53,6 +53,7 @@ class PropertyController {
         try {
             const data = await propertyService.getPropertyById(req.params.id);
             if (!data) return response.error(res, "Not Found", 404);
+            try { await propertyService.incrementViews(req.params.id); } catch { /* view count is best-effort */ }
             return response.success(res, "Property details fetched", data);
         } catch (err) { return response.error(res, err.message, 500); }
     }
@@ -213,6 +214,15 @@ class PropertyController {
         try {
             const data = await propertyService.getPropertyList();
             return response.success(res, "Approved properties retrieved successfully", data);
+        } catch (err) {
+            return response.error(res, err.message, 500);
+        }
+    }
+
+    async getPopularProperties(req, res) {
+        try {
+            const data = await propertyService.getPopularProperties();
+            return response.success(res, "Popular properties retrieved successfully", data);
         } catch (err) {
             return response.error(res, err.message, 500);
         }

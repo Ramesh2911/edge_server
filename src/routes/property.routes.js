@@ -17,6 +17,7 @@ router.get("/filter", propertyController.filterProperty);
 router.get("/all", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), propertyController.getProperties);
 router.get("/details/:id", propertyController.getPropertyById);
 router.get("/list", propertyController.propertyList);
+router.get("/popular", propertyController.getPopularProperties);
 
 // Protected Core Actions & User Dashboards
 router.post("/create", verifyToken, propertyUpload, propertyController.createProperty);
