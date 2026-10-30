@@ -2,6 +2,7 @@
 node_modules/
 
 # Environment
+.env
 
 # Logs
 logs/
@@ -16,6 +17,7 @@ uploads/
 Thumbs.db
 
 # IDE
+.vscode/
 .idea/
 
 # Coverage
@@ -26,4 +28,3 @@ dist/
 
 # Temporary
 temp/
-config.bat
