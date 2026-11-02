@@ -54,8 +54,10 @@ app.use(cors(corsOptions));
 // ===============================
 // Body Parser
 // ===============================
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Large multipart property uploads (many photos) should not hit 413 from
+// JSON/urlencoded parsers; multer handles file fields separately.
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
 // ===============================
 // Logger

@@ -18,7 +18,7 @@ const propertyUpload = (req, res, next) => {
         },
         {
             name: "floor_plan",
-            maxCount: 1
+            maxCount: 10
         }
     ])(req, res, (err) => {
 

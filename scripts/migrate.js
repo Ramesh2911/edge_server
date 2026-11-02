@@ -23,6 +23,18 @@ const MIGRATIONS = [
     },
 ];
 
+// Full CREATE TABLE statements (idempotent)
+const CREATE_STATEMENTS = [
+    `CREATE TABLE IF NOT EXISTS property_floor_plans (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        property_id INT NOT NULL,
+        image VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY property_id (property_id),
+        CONSTRAINT fk_pfpl_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )`,
+];
+
 async function main() {
     const conn = await mysql.createConnection({
         host: process.env.DB_HOST || "localhost",
@@ -37,6 +49,11 @@ async function main() {
     let skipped = 0;
 
     try {
+        for (const sql of CREATE_STATEMENTS) {
+            await conn.query(sql);
+            console.log("ensure table ok");
+        }
+
         for (const migration of MIGRATIONS) {
             const [tables] = await conn.query(
                 "SELECT 1 FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?",

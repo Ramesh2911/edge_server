@@ -39,9 +39,23 @@ const errorMiddleware = (
 
             res,
 
-            "File size exceeds limit.",
+            "File size exceeds limit. Max 10MB per image.",
 
-            400
+            413
+
+        );
+
+    }
+
+    if (err.type === "entity.too.large" || err.status === 413) {
+
+        return response.error(
+
+            res,
+
+            "Upload payload too large. Try fewer or smaller images.",
+
+            413
 
         );
 

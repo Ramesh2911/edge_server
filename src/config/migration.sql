@@ -256,3 +256,13 @@ CREATE TABLE IF NOT EXISTS property_amenities (
     CONSTRAINT fk_pa_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
     CONSTRAINT fk_pa_amenity FOREIGN KEY (amenity_id) REFERENCES amenities(id)
 );
+
+-- Floor plan images (multi-upload per property)
+CREATE TABLE IF NOT EXISTS property_floor_plans (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    property_id INT NOT NULL,
+    image VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY property_id (property_id),
+    CONSTRAINT fk_pfpl_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+);
