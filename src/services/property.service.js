@@ -9,6 +9,43 @@ class PropertyService {
     async getAllAmenities() { return await executeQuery("SELECT * FROM amenities WHERE status = 1"); }
     async getAllCategories() { return await executeQuery("SELECT * FROM property_categories WHERE status = 1"); }
 
+    // Amenities admin management
+    async getAllAmenitiesAdmin() {
+        return await executeQuery(
+            `SELECT a.*, (SELECT COUNT(*) FROM property_amenities pa WHERE pa.amenity_id = a.id) AS usage_count
+             FROM amenities a ORDER BY a.id ASC`
+        );
+    }
+
+    async createAmenity(name) {
+        const result = await executeQuery("INSERT INTO amenities (amenity_name, status) VALUES (?,1)", [name]);
+        return result.insertId;
+    }
+
+    async updateAmenity(id, data) {
+        return await executeQuery(
+            "UPDATE amenities SET amenity_name=?, status=? WHERE id=?",
+            [data.amenity_name, data.status, id]
+        );
+    }
+
+    async countAmenityUsage(id) {
+        const rows = await executeQuery("SELECT COUNT(*) AS cnt FROM property_amenities WHERE amenity_id=?", [id]);
+        return rows[0] ? rows[0].cnt : 0;
+    }
+
+    async deleteAmenity(id) {
+        return await executeQuery("DELETE FROM amenities WHERE id=?", [id]);
+    }
+
+    async getCityStats() {
+        return await executeQuery(
+            `SELECT city, COUNT(*) AS count FROM properties
+             WHERE property_status='Approved' AND city IS NOT NULL AND city != ''
+             GROUP BY city ORDER BY count DESC LIMIT 12`
+        );
+    }
+
     // Attach property_images (root-relative paths) to property rows
     async attachImages(list) {
         if (!Array.isArray(list) || list.length === 0) return list;

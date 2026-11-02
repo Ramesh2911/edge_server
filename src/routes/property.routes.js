@@ -14,10 +14,17 @@ router.get("/featured", propertyController.getFeaturedProperties);
 router.get("/latest", propertyController.getLatestProperties);
 router.get("/search", propertyController.searchProperty);
 router.get("/filter", propertyController.filterProperty);
+router.get("/cities", propertyController.getCityStats);
 router.get("/all", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), propertyController.getProperties);
 router.get("/details/:id", propertyController.getPropertyById);
 router.get("/list", propertyController.propertyList);
 router.get("/popular", propertyController.getPopularProperties);
+
+// Amenities management (Super Admin only) — public GET /amenities above stays unchanged
+router.get("/amenities/all", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN), propertyController.getAmenitiesAdmin);
+router.post("/amenities", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN), propertyController.createAmenity);
+router.put("/amenities/:id", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN), propertyController.updateAmenity);
+router.delete("/amenities/:id", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN), propertyController.deleteAmenity);
 
 // Protected Core Actions & User Dashboards
 router.post("/create", verifyToken, propertyUpload, propertyController.createProperty);

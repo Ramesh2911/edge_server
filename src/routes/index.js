@@ -31,6 +31,9 @@ router.use("/footer", require("./footer.routes"));
 // Contact inquiry (public)
 router.use("/contact", require("./contact.routes"));
 
+// Loan applications (public submit + admin view)
+router.use("/loans", require("./loan.routes"));
+
 // Public page content (about_*, contact_* keys)
 router.use("/content", require("./content.routes"));
 

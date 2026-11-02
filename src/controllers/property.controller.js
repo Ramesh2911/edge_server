@@ -17,6 +17,53 @@ class PropertyController {
         } catch (err) { return response.error(res, err.message, 500); }
     }
 
+    async getCityStats(req, res) {
+        try {
+            const data = await propertyService.getCityStats();
+            return response.success(res, "City stats loaded", data);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    // Amenities admin management (Super Admin)
+    async getAmenitiesAdmin(req, res) {
+        try {
+            const data = await propertyService.getAllAmenitiesAdmin();
+            return response.success(res, "Amenities loaded", data);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async createAmenity(req, res) {
+        try {
+            const name = req.body && req.body.amenity_name ? String(req.body.amenity_name).trim() : "";
+            if (!name) return response.error(res, "Amenity name is required", 400);
+            const id = await propertyService.createAmenity(name);
+            return response.success(res, "Amenity created successfully", { id }, 201);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async updateAmenity(req, res) {
+        try {
+            const name = req.body && req.body.amenity_name ? String(req.body.amenity_name).trim() : "";
+            if (!name) return response.error(res, "Amenity name is required", 400);
+            const status = Number(req.body.status) === 0 ? 0 : 1;
+            const result = await propertyService.updateAmenity(req.params.id, { amenity_name: name, status });
+            if (!result.affectedRows) return response.error(res, "Amenity not found", 404);
+            return response.success(res, "Amenity updated successfully");
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async deleteAmenity(req, res) {
+        try {
+            const usage = await propertyService.countAmenityUsage(req.params.id);
+            if (usage > 0) {
+                return response.error(res, "Amenity is used by properties — disable it instead", 409);
+            }
+            const result = await propertyService.deleteAmenity(req.params.id);
+            if (!result.affectedRows) return response.error(res, "Amenity not found", 404);
+            return response.success(res, "Amenity deleted successfully");
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
     // CRUD Handlers
     async createProperty(req, res) {
         if (!req.user) return response.error(res, "Unauthorized", 401);

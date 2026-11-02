@@ -2,6 +2,7 @@ const leadService = require("../services/lead.service");
 const activityService = require("../services/activity.service");
 const notificationService = require("../services/notification.service");
 const response = require("../helpers/response");
+const { ROLE } = require("../config/constants");
 
 class LeadController {
     async createRequirement(req, res) {
@@ -17,7 +18,8 @@ class LeadController {
 
     async getRequirements(req, res) {
         try {
-            const userId = req.user.role_id === 1 ? null : req.user.id;
+            const adminRoles = [ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B];
+            const userId = adminRoles.includes(req.user.role_id) ? null : req.user.id;
             const data = await leadService.getRequirements(userId);
             return response.success(res, "Buyer requirements loaded", data);
         } catch (err) { return response.error(res, err.message, 500); }

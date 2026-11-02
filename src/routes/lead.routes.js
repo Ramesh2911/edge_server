@@ -5,8 +5,8 @@ const verifyToken = require("../middleware/auth.middleware");
 const roleMiddleware = require("../middleware/role.middleware");
 const { ROLE } = require("../config/constants");
 
-// Public: Anyone can submit a buyer requirement (lead pop-up)
-router.post("/requirements", verifyToken, leadController.createRequirement);
+// Public: Anyone can submit a buyer requirement (lead pop-up) without login
+router.post("/requirements", leadController.createRequirement);
 
 // Authenticated: Users can view/edit their own requirements
 router.get("/requirements", verifyToken, leadController.getRequirements);

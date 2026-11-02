@@ -1,5 +1,17 @@
 const blogService = require("../services/blog.service");
 const response = require("../helpers/response");
+const { blogImage } = require("../helpers/upload");
+
+const buildPayload = (body, file) => {
+    const data = { ...body };
+    if (file) {
+        data.image_url = blogImage(file.filename);
+    }
+    if (data.post_date === "" || data.post_date === undefined) {
+        data.post_date = null;
+    }
+    return data;
+};
 
 class BlogController {
     async getPublicPosts(req, res) {
@@ -26,11 +38,12 @@ class BlogController {
 
     async create(req, res) {
         try {
-            const { title } = req.body;
+            const payload = buildPayload(req.body, req.file);
+            const { title } = payload;
             if (!title || !String(title).trim()) {
                 return response.error(res, "Title is required", 422);
             }
-            const id = await blogService.create(req.body);
+            const id = await blogService.create(payload);
             return response.success(res, "Blog post created successfully", { id }, 201);
         } catch (err) {
             if (err.code === "ER_DUP_ENTRY") return response.error(res, "A post with this title already exists", 409);
@@ -40,11 +53,12 @@ class BlogController {
 
     async update(req, res) {
         try {
-            const { title } = req.body;
+            const payload = buildPayload(req.body, req.file);
+            const { title } = payload;
             if (!title || !String(title).trim()) {
                 return response.error(res, "Title is required", 422);
             }
-            const data = await blogService.update(req.params.id, req.body);
+            const data = await blogService.update(req.params.id, payload);
             if (!data.length) return response.error(res, "Blog post not found", 404);
             return response.success(res, "Blog post updated successfully", data[0]);
         } catch (err) {
