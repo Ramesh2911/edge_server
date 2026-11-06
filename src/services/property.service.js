@@ -337,6 +337,8 @@ class PropertyService {
         const query = `
         SELECT 
             p.*,
+            u.full_name AS poster_name,
+            u.mobile AS poster_phone,
             pv.admin_a_status,
             pv.admin_b_status,
             pv.super_admin_status,
@@ -345,6 +347,7 @@ class PropertyService {
             pv.super_admin_comment
         FROM properties p
         LEFT JOIN property_verification pv ON p.id = pv.property_id
+        LEFT JOIN users u ON u.id = p.user_id
         ORDER BY p.created_at DESC
     `;
         return await executeQuery(query);
@@ -367,7 +370,13 @@ class PropertyService {
     }
 
     async getPropertyById(id) {
-        const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]);
+        const res = await executeQuery(
+            `SELECT p.*, u.full_name AS poster_name, u.mobile AS poster_phone
+             FROM properties p
+             LEFT JOIN users u ON u.id = p.user_id
+             WHERE p.id=?`,
+            [id]
+        );
         const withImages = await this.attachImage(res[0] || null);
         const withPlans = await this.attachFloorPlans(withImages);
         return await this.attachAmenities(withPlans);
