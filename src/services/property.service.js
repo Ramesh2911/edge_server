@@ -386,7 +386,20 @@ class PropertyService {
         return await this.attachFloorPlansList(list);
     }
 
-    async searchProperty(keyword) { return await this.attachImages(await executeQuery("SELECT * FROM properties WHERE property_status='Approved' AND (property_title LIKE ? OR description LIKE ?)", [`%${keyword}%`, `%${keyword}%`])); }
+    async searchProperty(keyword) {
+        const kw = String(keyword || "").trim().toLowerCase();
+        if (!kw) return [];
+        const tokens = kw.split(/\s+/).filter(Boolean);
+        const rows = await this.attachImages(
+            await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
+        );
+        return rows.filter((p) => {
+            const text = [p.property_title, p.description, p.address, p.city, p.state, p.property_type, p.pincode]
+                .map((v) => String(v || "").toLowerCase())
+                .join(" ");
+            return tokens.every((t) => text.includes(t));
+        });
+    }
 
     async filterProperty(f) {
         let sql = "SELECT * FROM properties WHERE property_status='Approved'";
@@ -634,14 +647,30 @@ class PropertyService {
             await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
         );
 
-        // --- keyword / location ---
+        // --- keyword (tokenized across title, description, location, type) ---
         const keyword = String(q.keyword || q.search || "").trim().toLowerCase();
         if (keyword) {
-            rows = rows.filter(
-                (p) =>
-                    String(p.property_title || "").toLowerCase().includes(keyword) ||
-                    String(p.description || "").toLowerCase().includes(keyword)
-            );
+            const tokens = keyword.split(/\s+/).filter(Boolean);
+            const haystack = (p) =>
+                [
+                    p.property_title,
+                    p.description,
+                    p.address,
+                    p.city,
+                    p.state,
+                    p.pincode,
+                    p.property_type,
+                    p.property_for,
+                    p.furnishing,
+                    p.construction_status,
+                ]
+                    .map((v) => String(v || "").toLowerCase())
+                    .join(" ");
+            // Every token must appear somewhere (phrase + multi-word friendly)
+            rows = rows.filter((p) => {
+                const text = haystack(p);
+                return tokens.every((t) => text.includes(t));
+            });
         }
         const location = String(q.location || q.city || "").trim().toLowerCase();
         if (location) {
