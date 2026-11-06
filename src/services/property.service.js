@@ -393,8 +393,24 @@ class PropertyService {
         const rows = await this.attachImages(
             await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
         );
+        let categoryNameById = {};
+        try {
+            const cats = await executeQuery("SELECT id, category_name FROM property_categories");
+            for (const c of cats) categoryNameById[Number(c.id)] = String(c.category_name || "");
+        } catch {
+            categoryNameById = {};
+        }
         return rows.filter((p) => {
-            const text = [p.property_title, p.description, p.address, p.city, p.state, p.property_type, p.pincode]
+            const text = [
+                p.property_title,
+                p.description,
+                p.address,
+                p.city,
+                p.state,
+                p.property_type,
+                p.pincode,
+                categoryNameById[Number(p.category_id)] || "",
+            ]
                 .map((v) => String(v || "").toLowerCase())
                 .join(" ");
             return tokens.every((t) => text.includes(t));
@@ -647,7 +663,20 @@ class PropertyService {
             await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
         );
 
-        // --- keyword (tokenized across title, description, location, type) ---
+        // category_id → category_name map (hero/sidebar send category names as propertyTypes)
+        let categoryNameById = {};
+        try {
+            const cats = await executeQuery(
+                "SELECT id, category_name FROM property_categories"
+            );
+            for (const c of cats) {
+                categoryNameById[Number(c.id)] = String(c.category_name || "");
+            }
+        } catch {
+            categoryNameById = {};
+        }
+
+        // --- keyword (tokenized across title, description, location, type, category) ---
         const keyword = String(q.keyword || q.search || "").trim().toLowerCase();
         if (keyword) {
             const tokens = keyword.split(/\s+/).filter(Boolean);
@@ -663,6 +692,7 @@ class PropertyService {
                     p.property_for,
                     p.furnishing,
                     p.construction_status,
+                    categoryNameById[Number(p.category_id)] || "",
                 ]
                     .map((v) => String(v || "").toLowerCase())
                     .join(" ");
@@ -691,12 +721,40 @@ class PropertyService {
             });
         }
 
-        // --- property types ---
+        // --- property types (category names like "Villa" OR raw property_type) ---
         const types = toArray(q.propertyTypes);
         if (types.length) {
-            rows = rows.filter((p) => types.includes(String(p.property_type || "")));
+            const typeIds = new Set();
+            const typeNames = new Set();
+            for (const t of types) {
+                const tl = t.toLowerCase();
+                typeNames.add(tl);
+                for (const [id, name] of Object.entries(categoryNameById)) {
+                    if (String(name).toLowerCase() === tl) typeIds.add(Number(id));
+                }
+            }
+            rows = rows.filter((p) => {
+                const catName = (categoryNameById[Number(p.category_id)] || "").toLowerCase();
+                const pType = String(p.property_type || "").toLowerCase();
+                return (
+                    typeIds.has(Number(p.category_id)) ||
+                    typeNames.has(catName) ||
+                    typeNames.has(pType)
+                );
+            });
         } else if (q.type) {
-            rows = rows.filter((p) => String(p.property_type || "") === String(q.type));
+            const tl = String(q.type).toLowerCase();
+            const typeId = Object.entries(categoryNameById).find(
+                ([, name]) => String(name).toLowerCase() === tl
+            );
+            rows = rows.filter((p) => {
+                const catName = (categoryNameById[Number(p.category_id)] || "").toLowerCase();
+                return (
+                    String(p.property_type || "").toLowerCase() === tl ||
+                    catName === tl ||
+                    (typeId && Number(p.category_id) === Number(typeId[0]))
+                );
+            });
         }
 
         // --- bedrooms (["1","2","3","4+"] — 4+ means >= 4) ---
