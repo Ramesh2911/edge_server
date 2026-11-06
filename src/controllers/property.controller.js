@@ -76,9 +76,15 @@ class PropertyController {
     async updateProperty(req, res) {
         if (!req.user) return response.error(res, "Unauthorized", 401);
         try {
-            await propertyService.updateProperty(req.params.id, req.body, req.user.id, req.files);
+            const result = await propertyService.updateProperty(req.params.id, req.body, req.user, req.files);
+            if (!result || !result.affectedRows) {
+                return response.error(res, "Property not found or not authorized", 404);
+            }
             return response.success(res, "Property updated successfully");
-        } catch (err) { return response.error(res, err.message, 500); }
+        } catch (err) {
+            const status = err.status || 500;
+            return response.error(res, err.message, status);
+        }
     }
 
     async deleteProperty(req, res) {

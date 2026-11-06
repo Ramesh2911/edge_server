@@ -145,8 +145,24 @@ class PropertyService {
         return res.insertId;
     }
 
-    async updateProperty(id, data, userId, files) {
+    async updateProperty(id, data, user, files) {
         const fs = require("fs");
+        const userId = user && user.id;
+        const roleId = Number(user && user.role_id);
+        const isAdmin = roleId === 1 || roleId === 2 || roleId === 3;
+
+        const [[owned]] = await db.query("SELECT id, user_id FROM properties WHERE id=?", [id]);
+        if (!owned) {
+            const err = new Error("Property not found");
+            err.status = 404;
+            throw err;
+        }
+        if (!isAdmin && Number(owned.user_id) !== Number(userId)) {
+            const err = new Error("You are not authorized to update this property");
+            err.status = 403;
+            throw err;
+        }
+
         const newFloorPlans = files && Array.isArray(files.floor_plan) ? files.floor_plan : [];
         const existingRows = await executeQuery(
             "SELECT image FROM property_floor_plans WHERE property_id=? ORDER BY id ASC",
@@ -154,7 +170,7 @@ class PropertyService {
         );
         let existingImages = existingRows.map((r) => r.image);
         if (existingImages.length === 0) {
-            const [[legacy]] = await db.query("SELECT floor_plan FROM properties WHERE id=? AND user_id=?", [id, userId]);
+            const [[legacy]] = await db.query("SELECT floor_plan FROM properties WHERE id=?", [id]);
             if (legacy && legacy.floor_plan) existingImages = [legacy.floor_plan];
         }
 
@@ -200,8 +216,16 @@ class PropertyService {
             floorPlan = existingImages[0] || null;
         }
 
-        const sql = `UPDATE properties SET category_id=?, property_title=?, property_for=?, property_type=?, price=?, area=?, area_unit=?, bedroom=?, bathroom=?, balcony=?, parking=?, furnishing=?, ownership=?, construction_status=?, possession_date=?, description=?, address=?, city=?, state=?, country=?, pincode=?, latitude=?, longitude=?, floor_plan=? WHERE id=? AND user_id=?`;
-        const result = await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null, floorPlan, id, userId]);
+        const where = isAdmin ? "id=?" : "id=? AND user_id=?";
+        const whereParams = isAdmin ? [id] : [id, userId];
+        const sql = `UPDATE properties SET category_id=?, property_title=?, property_for=?, property_type=?, price=?, area=?, area_unit=?, bedroom=?, bathroom=?, balcony=?, parking=?, furnishing=?, ownership=?, construction_status=?, possession_date=?, description=?, address=?, city=?, state=?, country=?, pincode=?, latitude=?, longitude=?, floor_plan=? WHERE ${where}`;
+        const result = await executeQuery(sql, [data.category_id, data.property_title, data.property_for, data.property_type, data.price, data.area, data.area_unit, data.bedroom || 0, data.bathroom || 0, data.balcony || 0, data.parking || 0, data.furnishing, data.ownership, data.construction_status, data.possession_date || null, data.description, data.address, data.city, data.state, data.country, data.pincode, data.latitude || null, data.longitude || null, floorPlan, ...whereParams]);
+        if (!result.affectedRows) {
+            const err = new Error("You are not authorized to update this property");
+            err.status = 403;
+            throw err;
+        }
+
         if (files && files.property_images) {
             for (let f of files.property_images) await executeQuery("INSERT INTO property_images (property_id, image) VALUES (?,?)", [id, f.filename]);
         }
@@ -220,6 +244,50 @@ class PropertyService {
                 }
             }
         }
+
+        // Replace amenities when the client sends an amenities payload (JSON array string)
+        if (data.amenities !== undefined && data.amenities !== null && String(data.amenities).trim() !== "") {
+            try {
+                const amenityIds = JSON.parse(data.amenities);
+                if (Array.isArray(amenityIds)) {
+                    await executeQuery("DELETE FROM property_amenities WHERE property_id=?", [id]);
+                    for (const rawId of amenityIds) {
+                        const amenityId = parseInt(rawId, 10);
+                        if (amenityId) {
+                            await executeQuery(
+                                "INSERT INTO property_amenities (property_id, amenity_id) VALUES (?,?)",
+                                [id, amenityId]
+                            );
+                        }
+                    }
+                }
+            } catch (e) { /* ignore malformed amenities payload */ }
+        }
+
+        // Owner content edits re-enter the review queue (matches edit-page copy).
+        // Admin edits keep the current review state.
+        if (!isAdmin) {
+            await executeQuery("UPDATE properties SET property_status='Pending' WHERE id=?", [id]);
+            await executeQuery(
+                `UPDATE property_verification
+                 SET admin_a_status='Pending', admin_b_status='Pending', super_admin_status='Pending'
+                 WHERE property_id=?`,
+                [id]
+            );
+        }
+
+        try {
+            const activityService = require("./activity.service");
+            await activityService.logActivity(
+                userId,
+                "PROPERTY_UPDATED",
+                "property",
+                id,
+                `Property updated: "${data.property_title}"`,
+                null
+            );
+        } catch (e) { /* silent */ }
+
         return result;
     }
 
@@ -281,10 +349,28 @@ class PropertyService {
     `;
         return await executeQuery(query);
     }
+    async attachAmenities(property) {
+        if (!property) return property;
+        const rows = await executeQuery(
+            `SELECT pa.amenity_id, a.amenity_name
+             FROM property_amenities pa
+             JOIN amenities a ON a.id = pa.amenity_id
+             WHERE pa.property_id = ?
+             ORDER BY a.amenity_name ASC`,
+            [property.id]
+        );
+        return {
+            ...property,
+            amenities: rows.map((r) => ({ id: r.amenity_id, amenity_name: r.amenity_name })),
+            amenity_ids: rows.map((r) => r.amenity_id),
+        };
+    }
+
     async getPropertyById(id) {
         const res = await executeQuery("SELECT * FROM properties WHERE id=?", [id]);
         const withImages = await this.attachImage(res[0] || null);
-        return await this.attachFloorPlans(withImages);
+        const withPlans = await this.attachFloorPlans(withImages);
+        return await this.attachAmenities(withPlans);
     }
     async getMyProperties(userId) {
         const list = await this.attachImages(await executeQuery("SELECT * FROM properties WHERE user_id=?", [userId]));
