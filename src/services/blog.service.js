@@ -54,17 +54,35 @@ class BlogService {
     }
 
     async update(id, data) {
-        const slug = slugify(data.slug || data.title);
+        const existing = await executeQuery("SELECT * FROM blog_posts WHERE id=?", [id]);
+        if (!existing.length) return [];
+        const current = existing[0];
+
+        let slug = slugify(data.slug || data.title);
+        if (slug) {
+            const clash = await executeQuery(
+                "SELECT id FROM blog_posts WHERE slug=? AND id!=? LIMIT 1",
+                [slug, id]
+            );
+            if (clash.length) slug = `${slug}-${id}`;
+        }
+
+        // Keep existing cover unless a new URL is provided or explicitly cleared
+        const imageUrl =
+            data.image_url !== undefined && data.image_url !== null
+                ? String(data.image_url)
+                : current.image_url || "";
+
         await executeQuery(
             `UPDATE blog_posts SET title=?, slug=?, tag=?, post_date=?, excerpt=?, image_url=?, status=? WHERE id=?`,
             [
                 data.title,
                 slug,
-                data.tag || "",
-                data.post_date || null,
-                data.excerpt || "",
-                data.image_url || "",
-                data.status !== undefined ? Number(data.status) : 1,
+                data.tag !== undefined ? data.tag : current.tag || "",
+                data.post_date !== undefined ? data.post_date : current.post_date,
+                data.excerpt !== undefined ? data.excerpt : current.excerpt || "",
+                imageUrl,
+                data.status !== undefined ? Number(data.status) : Number(current.status) || 0,
                 id
             ]
         );

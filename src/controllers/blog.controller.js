@@ -10,6 +10,12 @@ const buildPayload = (body, file) => {
     if (data.post_date === "" || data.post_date === undefined) {
         data.post_date = null;
     }
+    if (data.status !== undefined && data.status !== null && data.status !== "") {
+        data.status = Number(data.status);
+    }
+    if (data.title) data.title = String(data.title).trim();
+    if (data.tag !== undefined) data.tag = String(data.tag || "").trim();
+    if (data.excerpt !== undefined) data.excerpt = String(data.excerpt || "");
     return data;
 };
 
