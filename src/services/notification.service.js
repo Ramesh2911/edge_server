@@ -12,6 +12,17 @@ class NotificationService {
         return await executeQuery(sql, [userId, type, title, message, referenceType, referenceId]);
     }
 
+    // Fan-out to every admin account (SUPER_ADMIN / ADMIN_A / ADMIN_B).
+    async notifyAdmins(type, title, message, referenceType = null, referenceId = null) {
+        const admins = await executeQuery(
+            "SELECT id FROM users WHERE role_id IN (1,2,3)"
+        );
+        for (const a of admins) {
+            await this.create(a.id, type, title, message, referenceType, referenceId);
+        }
+        return admins.length;
+    }
+
     async getForUser(userId, page = 1, limit = 20) {
         const offset = (page - 1) * limit;
         const notifications = await executeQuery(

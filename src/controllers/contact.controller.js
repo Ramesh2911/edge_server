@@ -39,6 +39,19 @@ class ContactController {
             return response.error(res, "Could not submit inquiry");
         }
     }
+
+    // Admin inbox — GET /api/v1/contact
+    async listMessages(req, res) {
+        try {
+            const [rows] = await db.query(
+                "SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 500"
+            );
+            return response.success(res, "Contact messages loaded", rows);
+        } catch (error) {
+            console.error("contact.listMessages:", error);
+            return response.error(res, "Could not load messages");
+        }
+    }
 }
 
 module.exports = new ContactController();

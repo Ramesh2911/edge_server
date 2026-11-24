@@ -21,6 +21,15 @@ const MIGRATIONS = [
             ["view_count", "INT NOT NULL DEFAULT 0"],
         ],
     },
+    {
+        // Enquiry contact details captured on the form (points 8 & 15)
+        table: "property_inquiries",
+        columns: [
+            ["name", "VARCHAR(255) DEFAULT NULL"],
+            ["phone", "VARCHAR(20) DEFAULT NULL"],
+            ["email", "VARCHAR(255) DEFAULT NULL"],
+        ],
+    },
 ];
 
 // Full CREATE TABLE statements (idempotent)
@@ -32,6 +41,38 @@ const CREATE_STATEMENTS = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         KEY property_id (property_id),
         CONSTRAINT fk_pfpl_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE
+    )`,
+    // Newsletter subscribers (point 17)
+    `CREATE TABLE IF NOT EXISTS newsletter_subscribers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        email VARCHAR(255) NOT NULL,
+        source VARCHAR(50) DEFAULT 'website',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_newsletter_email (email)
+    )`,
+    // Dynamic partner/developer logos on home (point 21)
+    `CREATE TABLE IF NOT EXISTS partner_developers (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        logo VARCHAR(500) DEFAULT NULL,
+        website VARCHAR(500) DEFAULT NULL,
+        description VARCHAR(500) DEFAULT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        is_active TINYINT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`,
+    // Dynamic home hero banners (point 1)
+    `CREATE TABLE IF NOT EXISTS banners (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        image VARCHAR(500) NOT NULL,
+        title VARCHAR(255) DEFAULT NULL,
+        subtitle VARCHAR(500) DEFAULT NULL,
+        link VARCHAR(500) DEFAULT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        is_active TINYINT NOT NULL DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
 ];
 

@@ -185,7 +185,23 @@ class PropertyController {
     async interestedProperty(req, res) {
         if (!req.user) return response.error(res, "Unauthorized", 401);
         try {
-            await propertyService.addInterest(req.user.id, req.params.propertyId, req.body.message || null);
+            const { name, email, phone, message } = req.body || {};
+            // Point 15 — name, email and phone are mandatory on every enquiry.
+            if (!name || !String(name).trim()) {
+                return response.error(res, "Name is required", 400);
+            }
+            if (!email || !/^\S+@\S+\.\S+$/.test(String(email))) {
+                return response.error(res, "A valid Email is required", 400);
+            }
+            const digits = String(phone || "").replace(/\D/g, "");
+            if (digits.length < 10 || digits.length > 15) {
+                return response.error(res, "A valid Phone number is required", 400);
+            }
+            await propertyService.addInterest(req.user.id, req.params.propertyId, message || null, {
+                name: String(name).trim(),
+                email: String(email).trim(),
+                phone: digits,
+            });
             return response.success(res, "Interest logged successfully");
         } catch (err) { return response.error(res, err.message, 500); }
     }

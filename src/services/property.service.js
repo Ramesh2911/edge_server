@@ -267,6 +267,7 @@ class PropertyService {
         // Owner content edits re-enter the review queue (matches edit-page copy).
         // Admin edits keep the current review state.
         if (!isAdmin) {
+            const [[before]] = await db.query("SELECT property_status FROM properties WHERE id=?", [id]);
             await executeQuery("UPDATE properties SET property_status='Pending' WHERE id=?", [id]);
             await executeQuery(
                 `UPDATE property_verification
@@ -274,6 +275,19 @@ class PropertyService {
                  WHERE property_id=?`,
                 [id]
             );
+            // Point 4 — admins must re-approve an edited listing; notify them.
+            if (before && before.property_status === "Approved") {
+                try {
+                    const notificationService = require("./notification.service");
+                    await notificationService.notifyAdmins(
+                        "RE_APPROVAL",
+                        "Property Re-approval Required",
+                        `"${data.property_title}" was edited by its owner and needs re-approval.`,
+                        "property",
+                        id
+                    );
+                } catch (e) { /* silent */ }
+            }
         }
 
         try {
@@ -440,25 +454,62 @@ class PropertyService {
     async removeWishlist(userId, propertyId) { return await executeQuery("DELETE FROM user_wishlist WHERE user_id=? AND property_id=?", [userId, propertyId]); }
     async getWishlist(userId) { return await this.attachImages(await executeQuery("SELECT p.* FROM properties p JOIN user_wishlist w ON p.id = w.property_id WHERE w.user_id=?", [userId])); }
 
-    async addInterest(userId, propertyId, message) {
-        const result = await executeQuery("INSERT INTO property_inquiries (user_id, property_id, message) VALUES (?,?,?)", [userId, propertyId, message]);
+    async addInterest(userId, propertyId, message, contact = {}) {
+        const result = await executeQuery(
+            "INSERT INTO property_inquiries (user_id, property_id, message, name, phone, email) VALUES (?,?,?,?,?,?)",
+            [
+                userId,
+                propertyId,
+                message,
+                contact.name || null,
+                contact.phone || null,
+                contact.email || null,
+            ]
+        );
 
-        // Notify property owner
+        const notificationService = require("./notification.service");
+
+        // Notify property owner with the enquirer's direct contact details (point 8).
         try {
             const property = await this.getPropertyById(propertyId);
             if (property && property.user_id) {
-                const notificationService = require("./notification.service");
-                const buyer = await executeQuery("SELECT full_name FROM users WHERE id=?", [userId]);
-                const buyerName = buyer[0] ? buyer[0].full_name : "A buyer";
+                const buyer = await executeQuery("SELECT full_name, mobile, email FROM users WHERE id=?", [userId]);
+                const buyerName = contact.name || (buyer[0] && buyer[0].full_name) || "A buyer";
+                const buyerPhone = contact.phone || (buyer[0] && buyer[0].mobile) || "";
+                const contactLine = buyerPhone ? `Contact: ${buyerPhone}` : "Contact: not provided";
                 await notificationService.create(
                     property.user_id,
                     "INTEREST",
                     "New Interest in Your Property",
-                    `${buyerName} is interested in "${property.property_title}"`,
+                    `${buyerName} is interested in "${property.property_title}". ${contactLine}`,
                     "property",
                     propertyId
                 );
+
+                // Holder has no contact on file → tell the admins (point 8).
+                const [[owner]] = await db.query("SELECT mobile FROM users WHERE id=?", [property.user_id]);
+                if (!owner || !owner.mobile) {
+                    await notificationService.notifyAdmins(
+                        "INTEREST",
+                        "Listed Owner Has No Contact",
+                        `Enquiry on "${property.property_title}" but the posting holder has no phone number on file.`,
+                        "property",
+                        propertyId
+                    );
+                }
             }
+        } catch (e) { /* silent */ }
+
+        // Admins see every new enquiry (point 7).
+        try {
+            const [[prop]] = await db.query("SELECT property_title FROM properties WHERE id=?", [propertyId]);
+            await notificationService.notifyAdmins(
+                "ENQUIRY",
+                "New Property Enquiry",
+                `New enquiry received for "${prop ? prop.property_title : "property #" + propertyId}".`,
+                "property",
+                propertyId
+            );
         } catch (e) { /* silent */ }
 
         // Log activity
@@ -469,6 +520,16 @@ class PropertyService {
 
         return result;
     }
+
+    // Enquirer sees the holder's phone masked (xxxx2913); holder sees the
+    // enquirer's full contact; admins get full details via /leads/interests.
+    static maskPhone(phone) {
+        if (!phone) return phone;
+        const digits = String(phone);
+        if (digits.length <= 4) return "xxxx";
+        return `xxxx${digits.slice(-4)}`;
+    }
+
     async getInterestsForUser(userId) {
         const rows = await executeQuery(
             `SELECT i.id, i.user_id AS sender_id, i.property_id, i.message, i.status, i.created_at,
@@ -498,7 +559,11 @@ class PropertyService {
             if (!map.has(r.property_id)) map.set(r.property_id, []);
             map.get(r.property_id).push(`/uploads/property/images/${r.image}`);
         }
-        return rows.map((r) => ({ ...r, images: map.get(r.property_id) || [] }));
+        return rows.map((r) => ({
+            ...r,
+            owner_mobile: r.direction === "sent" ? PropertyService.maskPhone(r.owner_mobile) : r.owner_mobile,
+            images: map.get(r.property_id) || [],
+        }));
     }
 
     async removeInquiry(inquiryId, userId) {
@@ -609,10 +674,50 @@ class PropertyService {
             [adminAStatus, adminAComment, adminAReviewedBy, adminAReviewedAt, adminBStatus, adminBComment, adminBReviewedBy, adminBReviewedAt, superAdminStatus, superAdminComment, superAdminReviewedBy, superAdminReviewedAt, propertyId]
         );
 
+        const [[statusRow]] = await db.query("SELECT property_status FROM properties WHERE id = ?", [propertyId]);
+        const previousStatus = statusRow ? statusRow.property_status : null;
+
         await executeQuery(
             "UPDATE properties SET property_status = ? WHERE id = ?",
             [globalPropertyStatus, propertyId]
         );
+
+        // Point 18 — automated email to the customer on final Approve / Reject.
+        if (
+            previousStatus !== globalPropertyStatus &&
+            (globalPropertyStatus === "Approved" || globalPropertyStatus === "Rejected")
+        ) {
+            try {
+                const [[prop]] = await db.query(
+                    `SELECT p.property_title, p.id, u.email, u.full_name
+                     FROM properties p LEFT JOIN users u ON u.id = p.user_id
+                     WHERE p.id = ?`,
+                    [propertyId]
+                );
+                const { sendMail, wrapTemplate } = require("../utils/mailer");
+                const approved = globalPropertyStatus === "Approved";
+                const title = approved ? "Your Property Has Been Approved" : "Your Property Was Not Approved";
+                const body = approved
+                    ? `Congratulations${prop && prop.full_name ? " " + prop.full_name : ""}! Your listing <strong>"${prop ? prop.property_title : ""}"</strong> (#PROP-${propertyId}) has been reviewed and is now live on Edge Realty.`
+                    : `Your listing <strong>"${prop ? prop.property_title : ""}"</strong> (#PROP-${propertyId}) was reviewed and could not be published. Please edit the details and resubmit, or contact support for help.`;
+                if (prop && prop.email) {
+                    await sendMail({ to: prop.email, subject: title, html: wrapTemplate(title, body) });
+                }
+                // In-app notification for the owner as well.
+                const [[ownerRow]] = await db.query("SELECT user_id FROM properties WHERE id = ?", [propertyId]);
+                if (ownerRow && ownerRow.user_id) {
+                    const notificationService = require("./notification.service");
+                    await notificationService.create(
+                        ownerRow.user_id,
+                        "PROPERTY_STATUS",
+                        title,
+                        body.replace(/<[^>]+>/g, ""),
+                        "property",
+                        propertyId
+                    );
+                }
+            } catch (e) { /* silent */ }
+        }
 
         // Log activity
         try {
@@ -680,8 +785,12 @@ class PropertyService {
         const keyword = String(q.keyword || q.search || "").trim().toLowerCase();
         if (keyword) {
             const tokens = keyword.split(/\s+/).filter(Boolean);
+            // Point 20 — allow searching by property ID ("123", "prop-123", "#PROP-123").
+            const idMatch = keyword.match(/(?:prop-?)?#?(\d+)$/);
+            const searchId = idMatch ? Number(idMatch[1]) : null;
             const haystack = (p) =>
                 [
+                    p.id != null ? `prop-${p.id}` : "",
                     p.property_title,
                     p.description,
                     p.address,

@@ -21,27 +21,27 @@ const updateProfileValidation = [
         .withMessage("Invalid Mobile Number"),
 
     body("address")
-        .optional()
+        .optional({ values: "falsy" })
         .isLength({ max: 500 })
         .withMessage("Address should not exceed 500 characters"),
 
     body("city")
-        .optional()
+        .optional({ values: "falsy" })
         .isLength({ max: 100 })
         .withMessage("City should not exceed 100 characters"),
 
     body("state")
-        .optional()
+        .optional({ values: "falsy" })
         .isLength({ max: 100 })
         .withMessage("State should not exceed 100 characters"),
 
     body("country")
-        .optional()
+        .optional({ values: "falsy" })
         .isLength({ max: 100 })
         .withMessage("Country should not exceed 100 characters"),
 
     body("pincode")
-        .optional()
+        .optional({ values: "falsy" })
         .isLength({ min: 4, max: 10 })
         .withMessage("Invalid Pincode")
 

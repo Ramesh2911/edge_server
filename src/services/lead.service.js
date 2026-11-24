@@ -85,6 +85,68 @@ class LeadService {
              ORDER BY pi.created_at DESC`
         );
     }
+
+    // ---------- Newsletter subscribers (point 17) ----------
+
+    async subscribeNewsletter(email, source = "website") {
+        const result = await executeQuery(
+            `INSERT INTO newsletter_subscribers (email, source) VALUES (?,?)
+             ON DUPLICATE KEY UPDATE source = VALUES(source)`,
+            [email, source]
+        );
+        return result.insertId || null;
+    }
+
+    async getNewsletterSubscribers() {
+        return await executeQuery(
+            "SELECT * FROM newsletter_subscribers ORDER BY created_at DESC"
+        );
+    }
+
+    async deleteNewsletterSubscriber(id) {
+        return await executeQuery("DELETE FROM newsletter_subscribers WHERE id=?", [id]);
+    }
+
+    // ---------- All leads — property-wise / account-wise views (point 17) ----------
+
+    async getAllLeads(view = "account") {
+        const requirements = await executeQuery(
+            `SELECT 'requirement' AS lead_type, br.id, br.name, br.phone, br.email, br.title, br.city, br.status, br.created_at, NULL AS property_id
+             FROM buyer_requirements br`
+        );
+        const interests = await executeQuery(
+            `SELECT 'enquiry' AS lead_type, pi.id, COALESCE(pi.name, u.full_name) AS name,
+                    COALESCE(pi.phone, u.mobile) AS phone, COALESCE(pi.email, u.email) AS email,
+                    p.property_title AS title, p.city, pi.status, pi.created_at, pi.property_id
+             FROM property_inquiries pi
+             LEFT JOIN users u ON u.id = pi.user_id
+             LEFT JOIN properties p ON p.id = pi.property_id`
+        );
+        const newsletter = await executeQuery(
+            `SELECT 'newsletter' AS lead_type, ns.id, NULL AS name, NULL AS phone, ns.email,
+                    NULL AS title, NULL AS city, 'Subscribed' AS status, ns.created_at, NULL AS property_id
+             FROM newsletter_subscribers ns`
+        );
+        const loans = await executeQuery(
+            `SELECT 'loan' AS lead_type, la.id, la.name, la.phone, la.email,
+                    CONCAT('Loan of ', la.amount) AS title, NULL AS city, 'New' AS status, la.created_at, NULL AS property_id
+             FROM loan_applications la`
+        );
+
+        const all = [...requirements, ...interests, ...newsletter, ...loans]
+            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if (view === "property") {
+            const grouped = {};
+            for (const row of all) {
+                const key = row.property_id ? `property_${row.property_id}` : "unassigned";
+                if (!grouped[key]) grouped[key] = { group: key, property_id: row.property_id || null, leads: [] };
+                grouped[key].leads.push(row);
+            }
+            return Object.values(grouped);
+        }
+        return all;
+    }
 }
 
 module.exports = new LeadService();

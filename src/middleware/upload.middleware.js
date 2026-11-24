@@ -110,6 +110,30 @@ const blogUpload = (req, res, next) => {
 
 };
 
+/**
+ * Partner Logo Upload (dynamic developer marquee)
+ */
+
+const partnerUpload = (req, res, next) => {
+
+    upload.single("partner_logo")(req, res, (err) => {
+
+        if (err) {
+
+            return response.error(
+                res,
+                err.message,
+                400
+            );
+
+        }
+
+        next();
+
+    });
+
+};
+
 module.exports = {
 
     propertyUpload,
@@ -118,6 +142,8 @@ module.exports = {
 
     bannerUpload,
 
-    blogUpload
+    blogUpload,
+
+    partnerUpload
 
 };

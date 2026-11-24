@@ -55,6 +55,44 @@ class LeadController {
             return response.success(res, "All interests/pokes loaded", data);
         } catch (err) { return response.error(res, err.message, 500); }
     }
+
+    // ---------- Newsletter subscribers (point 17) ----------
+
+    async subscribeNewsletter(req, res) {
+        try {
+            const email = String((req.body && req.body.email) || "").trim();
+            if (!/^\S+@\S+\.\S+$/.test(email)) {
+                return response.error(res, "A valid Email is required", 400);
+            }
+            const source = req.body && req.body.source ? String(req.body.source) : "website";
+            await leadService.subscribeNewsletter(email, source);
+            return response.success(res, "Subscribed successfully!", { email }, 201);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async getNewsletterSubscribers(req, res) {
+        try {
+            const data = await leadService.getNewsletterSubscribers();
+            return response.success(res, "Newsletter subscribers loaded", data);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    async deleteNewsletterSubscriber(req, res) {
+        try {
+            await leadService.deleteNewsletterSubscriber(req.params.id);
+            return response.success(res, "Subscriber removed");
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
+    // ---------- All leads — property-wise / account-wise (point 17) ----------
+
+    async getAllLeads(req, res) {
+        try {
+            const view = req.query.view === "property" ? "property" : "account";
+            const data = await leadService.getAllLeads(view);
+            return response.success(res, "All leads loaded", data);
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
 }
 
 module.exports = new LeadController();

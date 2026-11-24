@@ -49,4 +49,10 @@ router.use("/deals", require("./deal.routes"));
 // Site Visits
 router.use("/site-visits", require("./siteVisit.routes"));
 
+// Partner developers (dynamic home marquee — point 21)
+router.use("/partners", require("./partner.routes"));
+
+// Home hero banners (dynamic — point 1)
+router.use("/banners", require("./banner.routes"));
+
 module.exports = router;

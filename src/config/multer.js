@@ -48,6 +48,12 @@ const storage = multer.diskStorage({
 
         }
 
+        if (file.fieldname === "partner_logo") {
+
+            uploadPath = "uploads/partners";
+
+        }
+
         if (file.fieldname === "blog_image") {
 
             uploadPath = "uploads/blog";

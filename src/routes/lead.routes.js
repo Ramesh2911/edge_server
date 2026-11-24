@@ -17,4 +17,12 @@ router.delete("/requirements/:id", verifyToken, leadController.deleteRequirement
 // Super Admin: View all interests/pokes with buyer+seller details
 router.get("/interests", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), leadController.getAllInterests);
 
+// Newsletter subscribers (point 17) — public subscribe, admin manage
+router.post("/newsletter", leadController.subscribeNewsletter);
+router.get("/newsletter", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), leadController.getNewsletterSubscribers);
+router.delete("/newsletter/:id", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), leadController.deleteNewsletterSubscriber);
+
+// All leads in one feed — ?view=account|property (point 17)
+router.get("/all", verifyToken, roleMiddleware(ROLE.SUPER_ADMIN, ROLE.ADMIN_A, ROLE.ADMIN_B), leadController.getAllLeads);
+
 module.exports = router;

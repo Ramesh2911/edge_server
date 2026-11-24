@@ -15,6 +15,17 @@ class SettingController {
         } catch (err) { return response.error(res, err.message, 500); }
     }
 
+    // Public copy keys consumed by the website/app (point 17).
+    async getPublicSettings(req, res) {
+        try {
+            const all = await settingService.getAll();
+            return response.success(res, "Public settings loaded", {
+                newsletter_heading: all.newsletter_heading || "Get A Discount",
+                popup_heading: all.popup_heading || "Subscribe to our Newsletter",
+            });
+        } catch (err) { return response.error(res, err.message, 500); }
+    }
+
     async updateSettings(req, res) {
         try {
             const body = req.body || {};
@@ -25,6 +36,16 @@ class SettingController {
                 if (name.length < 3 || name.length > 100)
                     return response.error(res, "Platform name must be 3-100 characters", 400);
                 entries.platform_name = name;
+            }
+
+            // Copy strings (newsletter + popup headings — point 17)
+            for (const key of ["newsletter_heading", "popup_heading"]) {
+                if (body[key] !== undefined) {
+                    const v = String(body[key]).trim();
+                    if (v.length < 3 || v.length > 160)
+                        return response.error(res, `${key.replace("_", " ")} must be 3-160 characters`, 400);
+                    entries[key] = v;
+                }
             }
 
             for (const [key, [min, max]] of Object.entries(RANGES)) {
