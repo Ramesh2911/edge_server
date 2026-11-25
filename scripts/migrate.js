@@ -74,6 +74,31 @@ const CREATE_STATEMENTS = [
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )`,
+    // Loan applications (public "Apply for Loan" form; admin view-only list)
+    `CREATE TABLE IF NOT EXISTS loan_applications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        phone VARCHAR(20) NOT NULL,
+        email VARCHAR(255) DEFAULT NULL,
+        amount DECIMAL(15,2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )`,
+    // Amenities master + join table (property add form)
+    `CREATE TABLE IF NOT EXISTS amenities (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        amenity_name VARCHAR(100) DEFAULT NULL,
+        status TINYINT DEFAULT 1
+    )`,
+    `CREATE TABLE IF NOT EXISTS property_amenities (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        property_id INT DEFAULT NULL,
+        amenity_id INT DEFAULT NULL,
+        KEY property_id (property_id),
+        KEY amenity_id (amenity_id),
+        CONSTRAINT fk_pa_property FOREIGN KEY (property_id) REFERENCES properties(id) ON DELETE CASCADE,
+        CONSTRAINT fk_pa_amenity FOREIGN KEY (amenity_id) REFERENCES amenities(id)
+    )`,
 ];
 
 async function main() {
