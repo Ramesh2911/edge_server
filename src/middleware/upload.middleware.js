@@ -134,6 +134,30 @@ const partnerUpload = (req, res, next) => {
 
 };
 
+/**
+ * Page-content gallery image upload (About page)
+ */
+
+const galleryUpload = (req, res, next) => {
+
+    upload.array("gallery_image", 20)(req, res, (err) => {
+
+        if (err) {
+
+            return response.error(
+                res,
+                err.message,
+                400
+            );
+
+        }
+
+        next();
+
+    });
+
+};
+
 module.exports = {
 
     propertyUpload,
@@ -144,6 +168,8 @@ module.exports = {
 
     blogUpload,
 
-    partnerUpload
+    partnerUpload,
+
+    galleryUpload
 
 };

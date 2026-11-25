@@ -60,6 +60,12 @@ const storage = multer.diskStorage({
 
         }
 
+        if (file.fieldname === "gallery_image") {
+
+            uploadPath = "uploads/content/gallery";
+
+        }
+
         createFolder(uploadPath);
 
         cb(null, uploadPath);
