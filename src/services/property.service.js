@@ -400,10 +400,59 @@ class PropertyService {
         return await this.attachFloorPlansList(list);
     }
 
+    // English filler tokens users type in chat — not meaningful for matching
+    _searchStopwords() {
+        return new Set([
+            "a", "an", "the", "in", "on", "at", "to", "for", "of", "and", "or",
+            "is", "are", "was", "were", "be", "been", "with", "by", "from",
+            "near", "around", "into", "my", "me", "i", "we", "our", "you",
+            "your", "this", "that", "these", "those", "it", "its", "as", "if",
+            "so", "than", "then", "too", "very", "can", "will", "just", "not",
+            "no", "do", "does", "did", "has", "have", "had", "what", "which",
+            "who", "whom", "how", "when", "where", "why", "all", "any", "some",
+            "please", "show", "find", "get", "give", "want", "need", "looking",
+            "search", "property", "properties", "flat", "flats", "home", "homes",
+            "house", "houses", "appartment", "apartment", "apartments",
+        ]);
+    }
+
+    // Shared haystack for chat search + browse keyword filter
+    _searchHaystack(p, categoryNameById) {
+        return [
+            p.id != null ? `prop-${p.id}` : "",
+            p.property_title,
+            p.description,
+            p.address,
+            p.city,
+            p.state,
+            p.pincode,
+            p.property_type,
+            p.property_for,
+            p.furnishing,
+            p.construction_status,
+            p.bedroom != null ? `${p.bedroom} bhk` : "",
+            p.bedroom != null ? String(p.bedroom) : "",
+            categoryNameById[Number(p.category_id)] || "",
+        ]
+            .map((v) => String(v || "").toLowerCase())
+            .join(" ");
+    }
+
+    // Chat keyword → meaningful tokens (stopwords out; "3 bhk" keeps "3"+"bhk")
+    _searchTokens(keyword) {
+        const stopwords = this._searchStopwords();
+        return String(keyword || "")
+            .toLowerCase()
+            .split(/\s+/)
+            .map((t) => t.replace(/[^a-z0-9+#.-]/g, ""))
+            .filter((t) => t && !stopwords.has(t));
+    }
+
     async searchProperty(keyword) {
         const kw = String(keyword || "").trim().toLowerCase();
         if (!kw) return [];
-        const tokens = kw.split(/\s+/).filter(Boolean);
+        const tokens = this._searchTokens(kw);
+        if (!tokens.length) return [];
         const rows = await this.attachImages(
             await executeQuery("SELECT * FROM properties WHERE property_status='Approved'")
         );
@@ -414,21 +463,34 @@ class PropertyService {
         } catch {
             categoryNameById = {};
         }
-        return rows.filter((p) => {
-            const text = [
-                p.property_title,
-                p.description,
-                p.address,
-                p.city,
-                p.state,
-                p.property_type,
-                p.pincode,
-                categoryNameById[Number(p.category_id)] || "",
-            ]
-                .map((v) => String(v || "").toLowerCase())
-                .join(" ");
-            return tokens.every((t) => text.includes(t));
+
+        // Property ID search ("123", "prop-123", "#PROP-123")
+        const idMatch = kw.match(/(?:prop-?)?#?(\d+)$/);
+        if (idMatch) {
+            const byId = rows.filter((p) => Number(p.id) === Number(idMatch[1]));
+            if (byId.length) return byId;
+        }
+
+        const scored = rows.map((p) => {
+            const text = this._searchHaystack(p, categoryNameById);
+            // Every meaningful token must appear (phrase + multi-word friendly)
+            if (tokens.every((t) => text.includes(t))) {
+                return { p, score: 100 + tokens.length };
+            }
+            // Partial: how many tokens matched — rank by coverage
+            const hits = tokens.filter((t) => text.includes(t)).length;
+            // Require at least half the tokens (min 1) so noise stays out
+            const minHits = Math.max(1, Math.ceil(tokens.length / 2));
+            if (hits >= minHits) {
+                return { p, score: hits * 10 };
+            }
+            return null;
         });
+
+        return scored
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score || (b.p.view_count || 0) - (a.p.view_count || 0))
+            .map((x) => x.p);
     }
 
     async filterProperty(f) {
@@ -781,35 +843,32 @@ class PropertyService {
             categoryNameById = {};
         }
 
-        // --- keyword (tokenized across title, description, location, type, category) ---
+        // --- keyword (chat + list page: stopwords + partial-match ranking) ---
         const keyword = String(q.keyword || q.search || "").trim().toLowerCase();
         if (keyword) {
-            const tokens = keyword.split(/\s+/).filter(Boolean);
-            // Point 20 — allow searching by property ID ("123", "prop-123", "#PROP-123").
+            const tokens = this._searchTokens(keyword);
             const idMatch = keyword.match(/(?:prop-?)?#?(\d+)$/);
-            const searchId = idMatch ? Number(idMatch[1]) : null;
-            const haystack = (p) =>
-                [
-                    p.id != null ? `prop-${p.id}` : "",
-                    p.property_title,
-                    p.description,
-                    p.address,
-                    p.city,
-                    p.state,
-                    p.pincode,
-                    p.property_type,
-                    p.property_for,
-                    p.furnishing,
-                    p.construction_status,
-                    categoryNameById[Number(p.category_id)] || "",
-                ]
-                    .map((v) => String(v || "").toLowerCase())
-                    .join(" ");
-            // Every token must appear somewhere (phrase + multi-word friendly)
-            rows = rows.filter((p) => {
-                const text = haystack(p);
-                return tokens.every((t) => text.includes(t));
-            });
+            if (idMatch) {
+                const searchId = Number(idMatch[1]);
+                const byId = rows.filter((p) => Number(p.id) === searchId);
+                if (byId.length) rows = byId;
+                else if (!tokens.length) rows = [];
+            }
+            if (tokens.length) {
+                const minHits = Math.max(1, Math.ceil(tokens.length / 2));
+                rows = rows
+                    .map((p) => {
+                        const text = this._searchHaystack(p, categoryNameById);
+                        if (tokens.every((t) => text.includes(t))) {
+                            return { p, score: 100 + tokens.length };
+                        }
+                        const hits = tokens.filter((t) => text.includes(t)).length;
+                        return hits >= minHits ? { p, score: hits * 10 } : null;
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => b.score - a.score || (b.p.view_count || 0) - (a.p.view_count || 0))
+                    .map((x) => x.p);
+            }
         }
         const location = String(q.location || q.city || "").trim().toLowerCase();
         if (location) {
